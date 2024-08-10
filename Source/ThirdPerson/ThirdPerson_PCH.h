@@ -24,3 +24,4 @@
 
 #include "MyLib/MyLog.h"
 #include "MyLib/MyUtil.h"
+#include "MyLib/MyConsole.h"

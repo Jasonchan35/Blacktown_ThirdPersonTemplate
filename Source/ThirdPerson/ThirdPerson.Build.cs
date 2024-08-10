@@ -10,6 +10,14 @@ public class ThirdPerson : ModuleRules
 
 		PrivatePCHHeaderFile = "ThirdPerson_PCH.h";
 
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput" });
+		PublicDependencyModuleNames.AddRange(new string[] {
+			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput"
+		});
+
+		if (Target.bBuildEditor == true) {
+			PrivateDependencyModuleNames.AddRange(new string[] {
+				"UnrealEd",
+			});
+		}
 	}
 }
