@@ -62,11 +62,10 @@ void AMyPlayerController::BeginPlay()
 void AMyPlayerController::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-
-	TraceFromCrossHair();
+	TraceAimingActor();
 }
 
-void AMyPlayerController::TraceFromCrossHair()
+void AMyPlayerController::TraceAimingActor()
 {
 	if (!UIMainWidget)
 		return;
@@ -85,8 +84,8 @@ void AMyPlayerController::TraceFromCrossHair()
 	auto LineStart = CameraLoc;
 	auto LineEnd   = LineStart + GetControlRotation().Vector() * 1000.0;
 
-	if (!TraceFromCrossHairDelegate.IsBound()) {
-		TraceFromCrossHairDelegate.BindUObject(this, &ThisClass::TraceFromCrossHairResult);
+	if (!TraceAimingActorDelegate.IsBound()) {
+		TraceAimingActorDelegate.BindUObject(this, &ThisClass::TraceAimingActorResult);
 	}
 
 	FCollisionQueryParams	ObjectQueryParams;
@@ -104,27 +103,28 @@ void AMyPlayerController::TraceFromCrossHair()
 											LineEnd, 
 											Params,
 											ObjectQueryParams,
-											&TraceFromCrossHairDelegate);
+											&TraceAimingActorDelegate);
 }
 
-void AMyPlayerController::TraceFromCrossHairResult(const FTraceHandle& TraceHandle, FTraceDatum& Data)
+void AMyPlayerController::TraceAimingActorResult(const FTraceHandle& TraceHandle, FTraceDatum& Data)
 {
 	auto* Actor = Data.OutHits.Num() > 0 ? Data.OutHits[0].GetActor() : nullptr;
-	SetTargetActor(Actor);
+	SetAimingActor(Actor);
 }
 
-void AMyPlayerController::SetTargetActor(AActor* NewActor)
+void AMyPlayerController::SetAimingActor(AActor* Actor)
 {
-	if (TargetActor == NewActor)
-		return;	// Same Target
+	auto* Cur = AimingActor.Get();
+	if (Cur == Actor)
+		return;
 
-	if (TargetActor.Get())
-		MyActorUtil::SetOverlayMaterial(TargetActor.Get(), nullptr);
+	if (Cur)
+		MyActorUtil::SetOverlayMaterial(Cur, nullptr);
 
-	TargetActor = NewActor;
+	AimingActor = Actor;
 
-	if (TargetActor.Get())
-		MyActorUtil::SetOverlayMaterial(TargetActor.Get(), MI_SelectionOverlay);
+	if (Actor)
+		MyActorUtil::SetOverlayMaterial(Actor, MI_SelectionOverlay);
 }
 
 void AMyPlayerController::IA_Move_Triggered(const FInputActionValue& Value)
@@ -175,7 +175,7 @@ void AMyPlayerController::IA_Skill_Started(const FInputActionValue& Value)
 	auto* Ch = GetCharacter();
 	if (!Ch) return;
 
-	Ch->SetCurrentSkill(EMySkill::UltraHand);
+	Ch->UltraHandPickActor(AimingActor.Get());
 }
 
 void AMyPlayerController::IA_Skill_Completed(const FInputActionValue& Value)

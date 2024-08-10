@@ -13,33 +13,26 @@ class UInputMappingContext;
 class UInputAction;
 struct FInputActionValue;
 
-UENUM()
-enum class EMySkill
-{
-	None,
-	UltraHand,
-};
+class UMyUltraHandComponent;
 
 UCLASS(config=Game)
 class AMyCharacter : public ACharacter
 {
 	GENERATED_BODY()
 
-	/** Camera boom positioning the camera behind the character */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
-	USpringArmComponent* CameraBoom;
+	UPROPERTY(Category = Camera, VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USpringArmComponent> CameraBoom;
 
-	/** Follow camera */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
-	UCameraComponent* FollowCamera;
+	UPROPERTY(Category = Camera, VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UCameraComponent> FollowCamera;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
-	EMySkill	CurrentSkill = EMySkill::None;
+	UPROPERTY(Category = Skill, VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UMyUltraHandComponent>	UltraHand;
 
 public:
 	AMyCharacter();
 
-	void SetCurrentSkill(EMySkill Skill);
+	void	UltraHandPickActor(AActor* Actor);
 
 protected:
 	virtual void BeginPlay();
@@ -49,10 +42,4 @@ public:
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	/** Returns FollowCamera subobject **/
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
-};
-
-UCLASS()
-class AThirdPersonCharacter : public AMyCharacter 
-{
-	GENERATED_BODY()
 };

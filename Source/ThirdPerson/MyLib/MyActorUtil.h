@@ -15,4 +15,7 @@ struct MyActorUtil
 	static UMaterialInterface*	GetMaterial(AActor* Actor, int ElementIndex);
 
 	static UMaterialInstanceDynamic*	CreateDynamicMaterialInstance(AActor* Actor, int ElementIndex);
+
+	static void		SetEnableGravity(AActor* Actor, bool bEnable);
+	static bool		IsGravityEnabled(AActor* Actor);
 };

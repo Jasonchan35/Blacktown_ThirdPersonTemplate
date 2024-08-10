@@ -11,6 +11,8 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 
+#include "Skills/MyUltraHandComponent.h"
+
 //////////////////////////////////////////////////////////////////////////
 // AMyCharacter
 
@@ -52,15 +54,18 @@ AMyCharacter::AMyCharacter()
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
+
+	UltraHand = CreateDefaultSubobject<UMyUltraHandComponent>(TEXT("UltraHand"));
+}
+
+void AMyCharacter::UltraHandPickActor(AActor* Actor)
+{
+	UltraHand->SetTarget(Actor);
 }
 
 void AMyCharacter::BeginPlay()
 {
-	// Call the base class  
+	// Call the base class
 	Super::BeginPlay();
 }
 
-void AMyCharacter::SetCurrentSkill(EMySkill Skill)
-{
-	CurrentSkill = Skill;
-}

@@ -60,3 +60,27 @@ UMaterialInstanceDynamic* MyActorUtil::CreateDynamicMaterialInstance(AActor* Act
 
 	return PrimComp->CreateDynamicMaterialInstance(ElementIndex);
 }
+
+void MyActorUtil::SetEnableGravity(AActor* Actor, bool bEnable)
+{
+	if (!Actor)
+		return;
+
+	auto* PrimComp = Actor->FindComponentByClass<UPrimitiveComponent>();
+	if (!PrimComp)
+		return;
+
+	PrimComp->SetEnableGravity(bEnable);
+}
+
+bool MyActorUtil::IsGravityEnabled(AActor* Actor)
+{
+	if (!Actor)
+		return false;
+
+	auto* PrimComp = Actor->FindComponentByClass<UPrimitiveComponent>();
+	if (!PrimComp)
+		return false;
+
+	return PrimComp->IsGravityEnabled();
+}

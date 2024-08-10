@@ -14,10 +14,3 @@ class AMyMainGameMode : public AGameModeBase
 public:
 	AMyMainGameMode();
 };
-
-
-UCLASS()
-class AThridPersonGameMode : public AMyMainGameMode
-{
-	GENERATED_BODY()
-};

@@ -1,4 +1,3 @@
-#pragma once
 
 #include "MyCharacter.h"
 #include "MyPlayerController.generated.h"
@@ -31,15 +30,16 @@ class AMyPlayerController : public APlayerController
 	UPROPERTY(Category = UI, VisibleAnywhere)
 	TSubclassOf<class UMyUIMainWidget>		UIMainWidgetClass;
 
-	UPROPERTY(Category = UI, VisibleAnywhere, Transient)
+	UPROPERTY(Category = UI, Transient, VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr< class UMyUIMainWidget>		UIMainWidget;
+
+	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	TWeakObjectPtr<AActor>	AimingActor;
 
 public:
 	AMyPlayerController();
 
 	FORCEINLINE AMyCharacter* GetCharacter() const { return CastChecked<AMyCharacter>(Super::GetCharacter()); }
-
-	void SetTargetActor(AActor* NewActor);
 
 protected:
 	virtual void SetupInputComponent() override;
@@ -55,11 +55,11 @@ protected:
 	void IA_Skill_Started(const FInputActionValue& Value);
 	void IA_Skill_Completed(const FInputActionValue& Value);
 
-
 private:
-	FTraceDelegate TraceFromCrossHairDelegate;
-	void TraceFromCrossHair();
-	void TraceFromCrossHairResult(const FTraceHandle& TraceHandle, FTraceDatum& Data);
+	FTraceDelegate TraceAimingActorDelegate;
+	void TraceAimingActor();
+	void TraceAimingActorResult(const FTraceHandle& TraceHandle, FTraceDatum& Data);
 
-	TWeakObjectPtr<AActor>	TargetActor;
+	void SetAimingActor(AActor* Actor);
+
 };
