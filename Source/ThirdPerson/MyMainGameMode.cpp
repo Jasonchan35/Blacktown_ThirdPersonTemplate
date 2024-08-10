@@ -4,12 +4,10 @@
 #include "MyCharacter.h"
 #include "UObject/ConstructorHelpers.h"
 
+#include "MyPlayerController.h"
+
 AMyMainGameMode::AMyMainGameMode()
 {
-	// set default pawn class to our Blueprinted character
-	static ConstructorHelpers::FClassFinder<APawn> PlayerPawnBPClass(TEXT("/Game/ThirdPerson/Blueprints/BP_MyCharacter"));
-	if (PlayerPawnBPClass.Class != NULL)
-	{
-		DefaultPawnClass = PlayerPawnBPClass.Class;
-	}
+	MY_CLASS_FINDER(DefaultPawnClass, TEXT("/Game/ThirdPerson/Blueprints/BP_MyCharacter"));
+	PlayerControllerClass = AMyPlayerController::StaticClass();
 }
