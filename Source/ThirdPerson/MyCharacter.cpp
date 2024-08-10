@@ -1,6 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "ThirdPersonCharacter.h"
+#include "MyCharacter.h"
 #include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -11,12 +11,10 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 
-DEFINE_LOG_CATEGORY(LogTemplateCharacter);
-
 //////////////////////////////////////////////////////////////////////////
-// AThirdPersonCharacter
+// AMyCharacter
 
-AThirdPersonCharacter::AThirdPersonCharacter()
+AMyCharacter::AMyCharacter()
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
@@ -54,7 +52,7 @@ AThirdPersonCharacter::AThirdPersonCharacter()
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
 
-void AThirdPersonCharacter::BeginPlay()
+void AMyCharacter::BeginPlay()
 {
 	// Call the base class  
 	Super::BeginPlay();
@@ -63,7 +61,7 @@ void AThirdPersonCharacter::BeginPlay()
 //////////////////////////////////////////////////////////////////////////
 // Input
 
-void AThirdPersonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+void AMyCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	// Add Input Mapping Context
 	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
@@ -82,18 +80,18 @@ void AThirdPersonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 
 		// Moving
-		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AThirdPersonCharacter::Move);
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AMyCharacter::Move);
 
 		// Looking
-		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AThirdPersonCharacter::Look);
+		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AMyCharacter::Look);
 	}
 	else
 	{
-		UE_LOG(LogTemplateCharacter, Error, TEXT("'%s' Failed to find an Enhanced Input component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
+		MY_LOG_ERROR(L"'{}' Failed to find an Enhanced Input component!", *GetNameSafe(this));
 	}
 }
 
-void AThirdPersonCharacter::Move(const FInputActionValue& Value)
+void AMyCharacter::Move(const FInputActionValue& Value)
 {
 	// input is a Vector2D
 	FVector2D MovementVector = Value.Get<FVector2D>();
@@ -116,7 +114,7 @@ void AThirdPersonCharacter::Move(const FInputActionValue& Value)
 	}
 }
 
-void AThirdPersonCharacter::Look(const FInputActionValue& Value)
+void AMyCharacter::Look(const FInputActionValue& Value)
 {
 	// input is a Vector2D
 	FVector2D LookAxisVector = Value.Get<FVector2D>();
