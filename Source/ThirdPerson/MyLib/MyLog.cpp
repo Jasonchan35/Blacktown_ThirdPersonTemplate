@@ -6,7 +6,7 @@ DEFINE_LOG_CATEGORY(MyLog)
 void MyLogger::Log(EMyLogLevel Lv, const FString& Msg)
 {
 	FColor Color = FColor::Red;
-	auto logVerbosity = ELogVerbosity::Error;
+	auto   logVerbosity = ELogVerbosity::Error;
 
 	switch (Lv)
 	{
@@ -14,19 +14,22 @@ void MyLogger::Log(EMyLogLevel Lv, const FString& Msg)
 		{
 			Color = FColor::White;
 			UE_LOG(MyLog, Display, TEXT("%s"), *Msg);
-		} break;
+		}
+		break;
 
 		case EMyLogLevel::Warning:
 		{
 			Color = FColor::Orange;
 			UE_LOG(MyLog, Warning, TEXT("%s"), *Msg);
-		} break;
+		}
+		break;
 
 		case EMyLogLevel::Error:
 		{
 			Color = FColor::Red;
 			UE_LOG(MyLog, Error, TEXT("%s"), *Msg);
-		} break;
+		}
+		break;
 	}
 
 	if (GEngine)
