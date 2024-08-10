@@ -57,3 +57,8 @@ void AMyCharacter::BeginPlay()
 	// Call the base class  
 	Super::BeginPlay();
 }
+
+void AMyCharacter::SetCurrentSkill(EMySkill Skill)
+{
+	CurrentSkill = Skill;
+}

@@ -4,6 +4,8 @@
 #define FMT_EXCEPTIONS 0
 #include "fmt/core.h"
 
+#include "MyEnum.h"
+
 using MyFmt_Context = fmt::wformat_context; // fmt::basic_format_context<JxFormat_FStringBackInserter, TCHAR>;
 
 class MyFmt_FStringBackInserter
@@ -79,9 +81,64 @@ using MyFmt_FormatterBase = fmt::formatter<FStringView, TCHAR>;
 template <>
 struct fmt::formatter<FString, TCHAR> : public MyFmt_FormatterBase
 {
-	using Super = fmt::formatter<FStringView, TCHAR>;
 	auto format(const FString& v, MyFmt_Context& ctx)
 	{
-		return Super::format(v, ctx);
+		return MyFmt_FormatterBase::format(v, ctx);
 	}
 };
+
+template <>
+struct fmt::formatter<FName, TCHAR> : public MyFmt_FormatterBase
+{
+	auto format(const FName& v, MyFmt_Context& ctx)
+	{
+		return MyFmt_FormatterBase::format(v.ToString(), ctx);
+	}
+};
+
+// enum class
+template <class T, class CH>
+struct fmt::formatter<T, CH, std::enable_if_t<std::is_enum_v<T>>> : public MyFmt_FormatterBase
+{
+	auto format(const T& V, MyFmt_Context& Context)
+	{
+		return MyFmt_FormatterBase::format(MyEnum::ToString(V), Context);
+	}
+};
+
+template <class E>
+struct fmt::formatter<UE::Math::TVector2<E>, TCHAR> : public MyFmt_FormatterBase
+{
+	auto format(const UE::Math::TVector2<E>& v, MyFmt_Context& ctx)
+	{
+		return fmt::format_to(ctx.out(), TEXT("[X={}, Y={}]"), v.X, v.Y);
+	}
+};
+
+template <class E>
+struct fmt::formatter<UE::Math::TVector<E>, TCHAR> : public MyFmt_FormatterBase
+{
+	auto format(const UE::Math::TVector<E>& v, MyFmt_Context& ctx)
+	{
+		return fmt::format_to(ctx.out(), TEXT("[X={}, Y={}, Z={}]"), v.X, v.Y, v.Z);
+	}
+};
+
+template <class E>
+struct fmt::formatter<UE::Math::TVector4<E>, TCHAR> : public MyFmt_FormatterBase
+{
+	auto format(const UE::Math::TVector4<E>& v, MyFmt_Context& ctx)
+	{
+		return fmt::format_to(ctx.out(), TEXT("[X={}, Y={}, Z={}, W={}]"), v.X, v.Y, v.Z, v.W);
+	}
+};
+
+template <class E>
+struct fmt::formatter<UE::Math::TRotator<E>, TCHAR> : public MyFmt_FormatterBase
+{
+	auto format(const UE::Math::TRotator<E>& v, MyFmt_Context& ctx)
+	{
+		return fmt::format_to(ctx.out(), TEXT("Rot[Pitch={}, Yaw={}, Roll={}]"), v.Pitch, v.Yaw, v.Roll);
+	}
+};
+

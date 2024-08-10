@@ -8,6 +8,6 @@
 
 AMyMainGameMode::AMyMainGameMode()
 {
-	MY_CLASS_FINDER(DefaultPawnClass, TEXT("/Game/ThirdPerson/Blueprints/BP_MyCharacter"));
-	PlayerControllerClass = AMyPlayerController::StaticClass();
+	MY_CDO_FINDER(DefaultPawnClass,			TEXT("/Game/ThirdPerson/Blueprints/BP_MyCharacter"));
+	MY_CDO_FINDER(PlayerControllerClass,	TEXT("/Game/ThirdPerson/Blueprints/BP_MyPlayerController"));
 }

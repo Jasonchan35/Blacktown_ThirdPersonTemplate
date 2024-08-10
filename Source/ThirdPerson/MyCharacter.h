@@ -13,6 +13,13 @@ class UInputMappingContext;
 class UInputAction;
 struct FInputActionValue;
 
+UENUM()
+enum class EMySkill
+{
+	None,
+	UltraHand,
+};
+
 UCLASS(config=Game)
 class AMyCharacter : public ACharacter
 {
@@ -25,9 +32,14 @@ class AMyCharacter : public ACharacter
 	/** Follow camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FollowCamera;
-	
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
+	EMySkill	CurrentSkill = EMySkill::None;
+
 public:
 	AMyCharacter();
+
+	void SetCurrentSkill(EMySkill Skill);
 
 protected:
 	virtual void BeginPlay();
