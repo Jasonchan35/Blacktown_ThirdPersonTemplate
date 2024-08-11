@@ -5,12 +5,22 @@
 UMyUltraHandComponent::UMyUltraHandComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-	TargetExtend = FVector2D(300, 50);
-	DampingFactor = 3;
-	FusiblePointSearchRadius = 100;
+	PrimaryComponentTick.TickGroup = TG_PrePhysics;
+	GoalExtend = FVector(300, 0, 50);
+	DampingFactor = 8;
 
 	FusiblePoint.Reset();
+	FusiblePointSearchRadius = 100;
 	FusiblePointAsyncSweep.Reset();
+}
+
+bool UMyUltraHandComponent::OnLookPitchInputAdded(float Pitch)
+{
+	if (!TargetActor.Get())
+		return false;
+
+	GoalExtend.Z += Pitch * -6;
+	return true;
 }
 
 void UMyUltraHandComponent::SetTargetActor(AActor* Actor)
@@ -20,13 +30,24 @@ void UMyUltraHandComponent::SetTargetActor(AActor* Actor)
 		return;
 
 	if (Cur)
-		MyActorUtil::SetEnableGravity(Cur, true);
+	{
+		if (auto* PrimComp = Cur->FindComponentByClass<UPrimitiveComponent>())
+		{
+			PrimComp->SetEnableGravity(true);
+			PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
+			PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+		}
+	}
 
 	TargetActor = Actor;
 	FusiblePoint.Reset();
 
 	if (Actor)
-		MyActorUtil::SetEnableGravity(Actor, false);
+	{
+		auto Yaw  = GetControlRotation().Yaw;
+		auto InvQuat = FRotator(0, Yaw, 0).Quaternion().Inverse();
+		TargetRelativeQuat = Actor->GetActorQuat() * InvQuat;
+	}
 }
 
 void UMyUltraHandComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -51,15 +72,24 @@ void UMyUltraHandComponent::UpdateTargetActorLocation(float DeltaTime)
 	if (!Ch)
 		return;
 
-	auto* Controller = Ch->GetController();
-	auto Rot = Controller ? Controller->GetControlRotation() : Ch->GetActorRotation();
-	
-	auto LineStart = Ch->GetActorLocation();
-	auto LineEnd   = LineStart + FRotator(0, Rot.Yaw, 0).RotateVector(FVector(TargetExtend.X, 0, TargetExtend.Y));
+	auto ControlRot = GetControlRotation();
 
-	DrawDebugLine(GetWorld(), LineStart, LineEnd, FColor::Green, false, 0, 0, 0);
+	auto Forward = FVector::ForwardVector;
+
+	auto LineStart = Ch->GetActorLocation();
+	auto LineEnd   = LineStart + FRotator(0, ControlRot.Yaw, 0).RotateVector(GoalExtend);
 
 	auto GoalLoc = LineEnd;
+
+	auto Distance = FVector::Distance(GoalLoc, Target->GetActorLocation());
+	const float DropTargetDistance = 300;
+	if (Distance > DropTargetDistance)
+	{
+		SetTargetActor(nullptr);
+		return;
+	}
+
+	DrawDebugLine(GetWorld(), LineStart, LineEnd, FColor::Green, false, 0, 0, 0);
 
 	auto* PrimComp = Target->FindComponentByClass<UPrimitiveComponent>();
 	if (!PrimComp)
@@ -68,11 +98,25 @@ void UMyUltraHandComponent::UpdateTargetActorLocation(float DeltaTime)
 	auto TargetLoc = Target->GetActorLocation();
 	auto Delta = GoalLoc - TargetLoc;
 
-	FVector NewLoc = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, DampingFactor);
+	FVector NewLoc  = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, DampingFactor);
+	FQuat   NewQuat = ControlRot.Quaternion() * TargetRelativeQuat;
 
-	Target->SetActorLocation(NewLoc, true, nullptr, ETeleportType::ResetPhysics);
+	Target->SetActorLocationAndRotation(NewLoc, NewQuat, true);
 	PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
 	PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+	PrimComp->SetEnableGravity(false);
+}
+
+FRotator UMyUltraHandComponent::GetControlRotation()
+{
+	auto* Ch = GetOwner<AMyCharacter>();
+	if (Ch)
+	{
+		if (auto* PC = Ch->GetController())
+			return PC->GetControlRotation();
+	}
+
+	return FRotator::ZeroRotator;
 }
 
 bool UMyUltraHandComponent::UpdateFusiblePoint()
@@ -202,23 +246,16 @@ void UMyUltraHandComponent::FuseFusibleObject()
 	SourcePrim->SetSimulatePhysics(true);
 	  DestPrim->SetSimulatePhysics(true);
 
-	FuseComp->SetConstrainedComponents(SourcePrim, NAME_None, DestPrim, NAME_None);
+	FuseComp->SetWorldLocation(FusiblePoint.SourcePoint);
+
+	FuseComp->SetLinearXLimit(ELinearConstraintMotion::LCM_Locked, 0);
+	FuseComp->SetLinearYLimit(ELinearConstraintMotion::LCM_Locked, 0);
+	FuseComp->SetLinearZLimit(ELinearConstraintMotion::LCM_Locked, 0);
 
 	FuseComp->SetAngularDriveMode(EAngularDriveMode::TwistAndSwing);
+	FuseComp->SetAngularTwistLimit( EAngularConstraintMotion::ACM_Locked, 0);
+	FuseComp->SetAngularSwing1Limit(EAngularConstraintMotion::ACM_Locked, 0);
+	FuseComp->SetAngularSwing2Limit(EAngularConstraintMotion::ACM_Locked, 0);
 
-	//FuseComp->SetAngularVelocityDriveTwistAndSwing(true, true);
-	//FuseComp->SetAngularVelocityTarget(FVector::Zero());
-
-	//FuseComp->SetAngularTwistLimit( ACM_Limited, 1.0f);
-	//FuseComp->SetAngularSwing1Limit(ACM_Limited, 1.0f);
-	//FuseComp->SetAngularSwing2Limit(ACM_Limited, 1.0f);
-
-	//const float Stiffness	 = 1000;
-	//const float Damping		 = 5;
-	//const float InForceLimit = 1000;
-	//FuseComp->SetAngularDriveParams(Stiffness, Damping, InForceLimit);
-
-	// FuseComp->SetLinearBreakable(true, 1000);
-	// FuseComp->SetAngularBreakable(true, 1000);
-	// FuseComp->SetAngularPlasticity(true, 50);
+	FuseComp->SetConstrainedComponents(SourcePrim, NAME_None, DestPrim, NAME_None);
 }

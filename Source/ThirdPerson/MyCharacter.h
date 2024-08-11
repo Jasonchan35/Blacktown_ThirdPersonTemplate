@@ -43,6 +43,8 @@ public:
 
 	UMyUltraHandComponent*	GetUltraHandComponent() { return UltraHandComponent; }
 
+	bool OnLookPitchInputAdded(float Pitch);
+
 protected:
 	virtual void BeginPlay();
 

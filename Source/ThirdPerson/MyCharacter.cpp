@@ -71,6 +71,14 @@ void AMyCharacter::SetCurrentAbility(EMyAbility Ability)
 	}
 }
 
+bool AMyCharacter::OnLookPitchInputAdded(float Pitch)
+{
+	if (CurrentAbility == EMyAbility::UltraHand)
+		return UltraHandComponent->OnLookPitchInputAdded(Pitch);
+
+	return false;
+}
+
 void AMyCharacter::BeginPlay()
 {
 	// Call the base class

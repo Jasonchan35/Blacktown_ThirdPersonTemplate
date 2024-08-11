@@ -25,12 +25,14 @@ void AMyPlayerController::SetupInputComponent()
 	Super::SetupInputComponent();
 
 	auto* InputComp = CastChecked<UEnhancedInputComponent>(InputComponent);
-	if (!InputComp) {
+	if (!InputComp)
+	{
 		MY_LOG_ERROR(TEXT("PlayerController missing UEnhancedInputComponent"));
 		return;
 	}
 
-	if (auto* InputSys = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer())) {
+	if (auto* InputSys = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+	{
 		InputSys->AddMappingContext(InputMappingContext, 0);
 	}
 
@@ -152,7 +154,15 @@ void AMyPlayerController::IA_Look_Triggered(const FInputActionValue& Value)
 	FVector2D LookAxisVector = Value.Get<FVector2D>();
 
 	AddYawInput(  LookAxisVector.X);
+
+	if (auto* Ch = GetCharacter())
+	{
+		if (Ch->OnLookPitchInputAdded(LookAxisVector.Y))
+			return;
+	}
+
 	AddPitchInput(LookAxisVector.Y);
+
 }
 
 void AMyPlayerController::IA_Jump_Started(const FInputActionValue& Value)
