@@ -22,6 +22,9 @@ class AMyPlayerController : public APlayerController
 	TObjectPtr<class UInputAction> IA_Jump;
 
 	UPROPERTY(Category = Input, EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<class UInputAction> IA_Cancel;
+
+	UPROPERTY(Category = Input, EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<class UInputAction> IA_Skill;
 
 	UPROPERTY(Category = Input, EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
@@ -46,14 +49,15 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
-	void IA_Move_Triggered(const FInputActionValue& Value);
-	void IA_Look_Triggered(const FInputActionValue& Value);
+	void IA_Move_Triggered	(const FInputActionValue& Value);
+	void IA_Look_Triggered	(const FInputActionValue& Value);
 
-	void IA_Jump_Started(const FInputActionValue& Value);
-	void IA_Jump_Completed(const FInputActionValue& Value);
+	void IA_Jump_Started	(const FInputActionValue& Value);
+	void IA_Jump_Completed	(const FInputActionValue& Value);
 
-	void IA_Skill_Started(const FInputActionValue& Value);
-	void IA_Skill_Completed(const FInputActionValue& Value);
+	void IA_Skill_Started	(const FInputActionValue& Value);
+	void IA_Cancel_Started	(const FInputActionValue& Value);
+
 
 private:
 	void UpdateAimingActor();

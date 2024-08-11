@@ -9,10 +9,7 @@ class UMyUltraHandComponent : public UActorComponent
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	FRotator	GoalRotator;
-
-	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	FVector		GoalExtend;
+	FVector2D	TargetExtend;
 
 	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	float		DampingFactor;
@@ -28,6 +25,8 @@ public:
 
 	void	SetTargetActor(AActor* Actor);
 	AActor*	GetTargetActor() { return TargetActor.Get(); }
+
+	void	FuseFusibleObject();
 
 protected:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction) override;

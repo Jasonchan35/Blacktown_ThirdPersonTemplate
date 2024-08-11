@@ -64,6 +64,11 @@ void AMyCharacter::SetCurrentAbility(EMyAbility Ability)
 		return;
 
 	CurrentAbility = Ability;
+
+	if (Ability != EMyAbility::UltraHand)
+	{
+		UltraHandComponent->SetTargetActor(nullptr);
+	}
 }
 
 void AMyCharacter::BeginPlay()

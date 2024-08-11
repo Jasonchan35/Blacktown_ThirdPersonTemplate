@@ -1,11 +1,12 @@
 #include "MyUltraHandComponent.h"
+#include "MyFuseComponent.h"
+#include "../MyCharacter.h"
 
 UMyUltraHandComponent::UMyUltraHandComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-	GoalRotator = FRotator(0, 0, 0);
-	GoalExtend  = FVector(200, 0, 50);
-	DampingFactor = 4;
+	TargetExtend = FVector2D(300, 50);
+	DampingFactor = 3;
 	FusiblePointSearchRadius = 100;
 
 	FusiblePoint.Reset();
@@ -22,6 +23,7 @@ void UMyUltraHandComponent::SetTargetActor(AActor* Actor)
 		MyActorUtil::SetEnableGravity(Cur, true);
 
 	TargetActor = Actor;
+	FusiblePoint.Reset();
 
 	if (Actor)
 		MyActorUtil::SetEnableGravity(Actor, false);
@@ -45,12 +47,15 @@ void UMyUltraHandComponent::UpdateTargetActorLocation(float DeltaTime)
 	if (!Target)
 		return;
 
-	auto* Owner = GetOwner();
-	if (!Owner)
+	auto* Ch = GetOwner<AMyCharacter>();
+	if (!Ch)
 		return;
 
-	auto LineStart = Owner->GetActorLocation();
-	auto LineEnd   = LineStart + GoalRotator.RotateVector(GoalExtend);
+	auto* Controller = Ch->GetController();
+	auto Rot = Controller ? Controller->GetControlRotation() : Ch->GetActorRotation();
+	
+	auto LineStart = Ch->GetActorLocation();
+	auto LineEnd   = LineStart + FRotator(0, Rot.Yaw, 0).RotateVector(FVector(TargetExtend.X, 0, TargetExtend.Y));
 
 	DrawDebugLine(GetWorld(), LineStart, LineEnd, FColor::Green, false, 0, 0, 0);
 
@@ -66,6 +71,8 @@ void UMyUltraHandComponent::UpdateTargetActorLocation(float DeltaTime)
 	FVector NewLoc = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, DampingFactor);
 
 	Target->SetActorLocation(NewLoc, true, nullptr, ETeleportType::ResetPhysics);
+	PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
+	PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
 }
 
 bool UMyUltraHandComponent::UpdateFusiblePoint()
@@ -170,4 +177,48 @@ void UMyUltraHandComponent::FusiblePointAsyncSweepResult(const FTraceHandle& Tra
 		if (Remain == 0) // Last one to update result
 			FusiblePoint = Out;
 	}
+}
+
+void UMyUltraHandComponent::FuseFusibleObject()
+{
+	auto* DestActor = FusiblePoint.DestActor.Get();
+	if (!DestActor)
+		return;
+
+	auto* SourceActor = FusiblePoint.SourceActor.Get();
+	if (!SourceActor)
+		return;
+
+	auto* SourcePrim = SourceActor->FindComponentByClass<UPrimitiveComponent>();
+	auto*   DestPrim =   DestActor->FindComponentByClass<UPrimitiveComponent>();
+
+	if (!SourcePrim || !DestPrim)
+		return;
+
+	auto* FuseComp = MyActorUtil::GetOrNewComponent<UMyFuseComponent>(SourceActor);
+	if (!FuseComp)
+		return;
+
+	SourcePrim->SetSimulatePhysics(true);
+	  DestPrim->SetSimulatePhysics(true);
+
+	FuseComp->SetConstrainedComponents(SourcePrim, NAME_None, DestPrim, NAME_None);
+
+	FuseComp->SetAngularDriveMode(EAngularDriveMode::TwistAndSwing);
+
+	//FuseComp->SetAngularVelocityDriveTwistAndSwing(true, true);
+	//FuseComp->SetAngularVelocityTarget(FVector::Zero());
+
+	//FuseComp->SetAngularTwistLimit( ACM_Limited, 1.0f);
+	//FuseComp->SetAngularSwing1Limit(ACM_Limited, 1.0f);
+	//FuseComp->SetAngularSwing2Limit(ACM_Limited, 1.0f);
+
+	//const float Stiffness	 = 1000;
+	//const float Damping		 = 5;
+	//const float InForceLimit = 1000;
+	//FuseComp->SetAngularDriveParams(Stiffness, Damping, InForceLimit);
+
+	// FuseComp->SetLinearBreakable(true, 1000);
+	// FuseComp->SetAngularBreakable(true, 1000);
+	// FuseComp->SetAngularPlasticity(true, 50);
 }

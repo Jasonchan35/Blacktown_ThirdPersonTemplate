@@ -14,6 +14,7 @@ AMyPlayerController::AMyPlayerController()
 	MY_CDO_FINDER(IA_Jump,				TEXT("/Game/ThirdPerson/Input/Actions/IA_Jump"));
 	MY_CDO_FINDER(IA_Move,				TEXT("/Game/ThirdPerson/Input/Actions/IA_Move"));
 	MY_CDO_FINDER(IA_Look,				TEXT("/Game/ThirdPerson/Input/Actions/IA_Look"));
+	MY_CDO_FINDER(IA_Cancel,			TEXT("/Game/ThirdPerson/Input/Actions/IA_Cancel"));
 	MY_CDO_FINDER(IA_Skill,				TEXT("/Game/ThirdPerson/Input/Actions/IA_Skill"));
 	MY_CDO_FINDER(UIMainWidgetClass,	TEXT("/Game/ThirdPerson/UI/WBP_MyUIMainWidget"));
 	MY_CDO_FINDER(MI_SelectionOverlay,	TEXT("/Game/ThirdPerson/Materials/M_SelectionOverlay"));
@@ -47,8 +48,8 @@ void AMyPlayerController::SetupInputComponent()
 		MY_BIND_INPUT_ACTION(IA_Look,		Triggered);
 		MY_BIND_INPUT_ACTION(IA_Jump,		Started);
 		MY_BIND_INPUT_ACTION(IA_Jump,		Completed);
+		MY_BIND_INPUT_ACTION(IA_Cancel,		Started);
 		MY_BIND_INPUT_ACTION(IA_Skill,		Started);
-		MY_BIND_INPUT_ACTION(IA_Skill,		Completed);
 
 	#undef MY_BIND_INPUT_ACTION
 }
@@ -183,12 +184,17 @@ void AMyPlayerController::IA_Skill_Started(const FInputActionValue& Value)
 		return;
 
 	if (UltraHand->GetTargetActor())
-		UltraHand->SetTargetActor(nullptr);
+		UltraHand->FuseFusibleObject();
 	else
 		UltraHand->SetTargetActor(AimingActor.Get());
 }
 
-void AMyPlayerController::IA_Skill_Completed(const FInputActionValue& Value)
+void AMyPlayerController::IA_Cancel_Started(const FInputActionValue& Value)
 {
+	auto* Ch = GetCharacter();
+	if (!Ch)
+		return;
+
+	Ch->SetCurrentAbility(EMyAbility::None);
 }
 
