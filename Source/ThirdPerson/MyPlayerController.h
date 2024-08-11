@@ -56,9 +56,10 @@ protected:
 	void IA_Skill_Completed(const FInputActionValue& Value);
 
 private:
-	FTraceDelegate TraceAimingActorDelegate;
-	void TraceAimingActor();
-	void TraceAimingActorResult(const FTraceHandle& TraceHandle, FTraceDatum& Data);
+	void UpdateAimingActor();
+
+	FTraceDelegate AimingActorAsyncTraceDelegate;
+	void AimingActorAsyncTraceResult(const FTraceHandle& TraceHandle, FTraceDatum& Data);
 
 	void SetAimingActor(AActor* Actor);
 

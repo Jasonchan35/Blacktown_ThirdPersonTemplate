@@ -84,3 +84,14 @@ bool MyActorUtil::IsGravityEnabled(AActor* Actor)
 
 	return PrimComp->IsGravityEnabled();
 }
+
+float MyActorUtil::GetBoundingSphereRadius(AActor* Actor, bool bOnlyCollidingComponents)
+{
+	if (!Actor)
+		return 0;
+
+	FVector Origin, BoxExtent;
+	Actor->GetActorBounds(bOnlyCollidingComponents, Origin, BoxExtent);
+
+	return BoxExtent.Length();
+}

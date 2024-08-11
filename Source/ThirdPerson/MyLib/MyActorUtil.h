@@ -18,4 +18,6 @@ struct MyActorUtil
 
 	static void		SetEnableGravity(AActor* Actor, bool bEnable);
 	static bool		IsGravityEnabled(AActor* Actor);
+
+	static float	GetBoundingSphereRadius(AActor* Actor, bool bOnlyCollidingComponents);
 };

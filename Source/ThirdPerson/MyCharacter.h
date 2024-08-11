@@ -15,6 +15,13 @@ struct FInputActionValue;
 
 class UMyUltraHandComponent;
 
+UENUM()
+enum class EMyAbility
+{
+	None,
+	UltraHand,
+};
+
 UCLASS(config=Game)
 class AMyCharacter : public ACharacter
 {
@@ -27,12 +34,14 @@ class AMyCharacter : public ACharacter
 	TObjectPtr<UCameraComponent> FollowCamera;
 
 	UPROPERTY(Category = Skill, VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UMyUltraHandComponent>	UltraHand;
+	TObjectPtr<UMyUltraHandComponent>	UltraHandComponent;
 
 public:
 	AMyCharacter();
+	void		SetCurrentAbility(EMyAbility Ability);
+	EMyAbility	GetCurrentAbility() const { return CurrentAbility; }
 
-	void	UltraHandPickActor(AActor* Actor);
+	UMyUltraHandComponent*	GetUltraHandComponent() { return UltraHandComponent; }
 
 protected:
 	virtual void BeginPlay();
@@ -42,4 +51,8 @@ public:
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	/** Returns FollowCamera subobject **/
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+
+private:
+
+	EMyAbility	CurrentAbility = EMyAbility::None;
 };

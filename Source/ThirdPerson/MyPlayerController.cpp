@@ -4,6 +4,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputMappingContext.h"
 
+#include "Abilities//MyUltraHandComponent.h"
 #include "UI/MyUIMainWidget.h"
 #include "Animation/SkeletalMeshActor.h"
 
@@ -62,10 +63,10 @@ void AMyPlayerController::BeginPlay()
 void AMyPlayerController::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	TraceAimingActor();
+	UpdateAimingActor();
 }
 
-void AMyPlayerController::TraceAimingActor()
+void AMyPlayerController::UpdateAimingActor()
 {
 	if (!UIMainWidget)
 		return;
@@ -84,29 +85,28 @@ void AMyPlayerController::TraceAimingActor()
 	auto LineStart = CameraLoc;
 	auto LineEnd   = LineStart + GetControlRotation().Vector() * 1000.0;
 
-	if (!TraceAimingActorDelegate.IsBound()) {
-		TraceAimingActorDelegate.BindUObject(this, &ThisClass::TraceAimingActorResult);
-	}
+	if (!AimingActorAsyncTraceDelegate.IsBound())
+		AimingActorAsyncTraceDelegate.BindUObject(this, &ThisClass::AimingActorAsyncTraceResult);
 
-	FCollisionQueryParams	ObjectQueryParams;
-	ObjectQueryParams.AddIgnoredActor(Ch);
+	FCollisionQueryParams	QueryParams;
+	QueryParams.AddIgnoredActor(Ch);
 
-	FCollisionObjectQueryParams Params;
-	Params.AddObjectTypesToQuery(ECC_WorldDynamic);
-	Params.AddObjectTypesToQuery(ECC_PhysicsBody);
-	Params.AddObjectTypesToQuery(ECC_Pawn);
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_PhysicsBody);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
 
 //	DrawDebugLine(GetWorld(), LineStart, LineEnd, FColor::Red, false, 5.0f, 0, 0);
 
 	GetWorld()->AsyncLineTraceByObjectType(	EAsyncTraceType::Single,
 											LineStart,
-											LineEnd, 
-											Params,
+											LineEnd,
 											ObjectQueryParams,
-											&TraceAimingActorDelegate);
+											QueryParams,
+											&AimingActorAsyncTraceDelegate);
 }
 
-void AMyPlayerController::TraceAimingActorResult(const FTraceHandle& TraceHandle, FTraceDatum& Data)
+void AMyPlayerController::AimingActorAsyncTraceResult(const FTraceHandle& TraceHandle, FTraceDatum& Data)
 {
 	auto* Actor = Data.OutHits.Num() > 0 ? Data.OutHits[0].GetActor() : nullptr;
 	SetAimingActor(Actor);
@@ -165,7 +165,8 @@ void AMyPlayerController::IA_Jump_Started(const FInputActionValue& Value)
 void AMyPlayerController::IA_Jump_Completed(const FInputActionValue& Value)
 {
 	auto* Ch = GetCharacter();
-	if (!Ch) return;
+	if (!Ch)
+		return;
 
 	Ch->StopJumping();
 }
@@ -173,9 +174,18 @@ void AMyPlayerController::IA_Jump_Completed(const FInputActionValue& Value)
 void AMyPlayerController::IA_Skill_Started(const FInputActionValue& Value)
 {
 	auto* Ch = GetCharacter();
-	if (!Ch) return;
+	if (!Ch)
+		return;
 
-	Ch->UltraHandPickActor(AimingActor.Get());
+	Ch->SetCurrentAbility(EMyAbility::UltraHand);
+	auto* UltraHand = Ch->GetUltraHandComponent();
+	if (!UltraHand)
+		return;
+
+	if (UltraHand->GetTargetActor())
+		UltraHand->SetTargetActor(nullptr);
+	else
+		UltraHand->SetTargetActor(AimingActor.Get());
 }
 
 void AMyPlayerController::IA_Skill_Completed(const FInputActionValue& Value)

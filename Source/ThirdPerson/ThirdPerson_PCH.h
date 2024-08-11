@@ -9,6 +9,7 @@
 #include "UObject/WeakInterfacePtr.h"
 #include "UObject/ConstructorHelpers.h"
 
+#include "Engine/OverlapResult.h"
 #include "Engine/TriggerBox.h"
 #include "Engine/TriggerCapsule.h"
 #include "Engine/TriggerSphere.h"
