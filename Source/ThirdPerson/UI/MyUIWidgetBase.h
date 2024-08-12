@@ -5,6 +5,8 @@
 
 #include "MyUIWidgetBase.generated.h"
 
+class AMyPlayerController;
+
 UCLASS(Abstract)
 class UMyUIWidgetBase : public UUserWidget
 {
@@ -12,6 +14,8 @@ class UMyUIWidgetBase : public UUserWidget
 public:
 	void SafeAddToViewport(int ZOrder = 0);
 	void SafeRemoveFromParent();
+
+	AMyPlayerController*	GetMyPlayerController();
 
 private:
 	// Disable Super functions

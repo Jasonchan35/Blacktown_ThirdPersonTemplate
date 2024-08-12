@@ -13,6 +13,8 @@ class UInputMappingContext;
 class UInputAction;
 struct FInputActionValue;
 
+class AMyPlayerController;
+class UMyAbilityComponent;
 class UMyUltraHandComponent;
 
 UENUM()
@@ -41,12 +43,13 @@ public:
 	void		SetCurrentAbility(EMyAbility Ability);
 	EMyAbility	GetCurrentAbility() const { return CurrentAbility; }
 
-	UMyUltraHandComponent*	GetUltraHandComponent() { return UltraHandComponent; }
+	AMyPlayerController* GetPlayerController();
 
-	bool OnLookPitchInputAdded(float Pitch);
+	void IA_Confirm_Started();
 
 protected:
-	virtual void BeginPlay();
+	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 
 public:
 	/** Returns CameraBoom subobject **/
@@ -55,6 +58,6 @@ public:
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
 private:
-
+	TObjectPtr<UMyAbilityComponent>	CurrentAbilityComponent;
 	EMyAbility	CurrentAbility = EMyAbility::None;
 };

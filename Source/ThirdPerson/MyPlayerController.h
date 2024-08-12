@@ -1,5 +1,7 @@
+#pragma once
 
 #include "MyCharacter.h"
+#include "GameFramework/PlayerController.h"
 #include "MyPlayerController.generated.h"
 
 struct FInputActionValue;
@@ -22,19 +24,19 @@ class AMyPlayerController : public APlayerController
 	TObjectPtr<class UInputAction> IA_Jump;
 
 	UPROPERTY(Category = Input, EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<class UInputAction> IA_Confirm;
+
+	UPROPERTY(Category = Input, EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<class UInputAction> IA_Cancel;
 
 	UPROPERTY(Category = Input, EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<class UInputAction> IA_Skill;
-
-	UPROPERTY(Category = Input, EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<class UMaterialInterface> MI_SelectionOverlay;
+	TObjectPtr<class UInputAction> IA_AbilityA;
 
 	UPROPERTY(Category = UI, VisibleAnywhere)
-	TSubclassOf<class UMyUIMainWidget>		UIMainWidgetClass;
+	TSubclassOf<class UMyUIMainWidget> UI_MainWidgetClass;
 
 	UPROPERTY(Category = UI, Transient, VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	TObjectPtr< class UMyUIMainWidget>		UIMainWidget;
+	TObjectPtr< class UMyUIMainWidget> UI_MainWidget;
 
 	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	TWeakObjectPtr<AActor>	AimingActor;
@@ -42,7 +44,10 @@ class AMyPlayerController : public APlayerController
 public:
 	AMyPlayerController();
 
-	FORCEINLINE AMyCharacter* GetCharacter() const { return CastChecked<AMyCharacter>(Super::GetCharacter()); }
+	AMyCharacter* GetMyCharacter() const;
+
+	FVector2f	GetCrossHairPos();
+	FVector		GetCameraLocation();
 
 protected:
 	virtual void SetupInputComponent() override;
@@ -55,15 +60,8 @@ protected:
 	void IA_Jump_Started	(const FInputActionValue& Value);
 	void IA_Jump_Completed	(const FInputActionValue& Value);
 
-	void IA_Skill_Started	(const FInputActionValue& Value);
+	void IA_Confirm_Started	(const FInputActionValue& Value);
 	void IA_Cancel_Started	(const FInputActionValue& Value);
 
-private:
-	void UpdateAimingActor();
-
-	FTraceDelegate AimingActorAsyncTraceDelegate;
-	void AimingActorAsyncTraceResult(const FTraceHandle& TraceHandle, FTraceDatum& Data);
-
-	void SetAimingActor(AActor* Actor);
-
+	void IA_AbilityA_Started(const FInputActionValue& Value);
 };

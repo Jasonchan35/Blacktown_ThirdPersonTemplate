@@ -4,7 +4,6 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputMappingContext.h"
 
-#include "Abilities//MyUltraHandComponent.h"
 #include "UI/MyUIMainWidget.h"
 #include "Animation/SkeletalMeshActor.h"
 
@@ -14,10 +13,26 @@ AMyPlayerController::AMyPlayerController()
 	MY_CDO_FINDER(IA_Jump,				TEXT("/Game/ThirdPerson/Input/Actions/IA_Jump"));
 	MY_CDO_FINDER(IA_Move,				TEXT("/Game/ThirdPerson/Input/Actions/IA_Move"));
 	MY_CDO_FINDER(IA_Look,				TEXT("/Game/ThirdPerson/Input/Actions/IA_Look"));
+	MY_CDO_FINDER(IA_Confirm,			TEXT("/Game/ThirdPerson/Input/Actions/IA_Confirm"));
 	MY_CDO_FINDER(IA_Cancel,			TEXT("/Game/ThirdPerson/Input/Actions/IA_Cancel"));
-	MY_CDO_FINDER(IA_Skill,				TEXT("/Game/ThirdPerson/Input/Actions/IA_Skill"));
-	MY_CDO_FINDER(UIMainWidgetClass,	TEXT("/Game/ThirdPerson/UI/WBP_MyUIMainWidget"));
-	MY_CDO_FINDER(MI_SelectionOverlay,	TEXT("/Game/ThirdPerson/Materials/M_SelectionOverlay"));
+	MY_CDO_FINDER(IA_AbilityA,			TEXT("/Game/ThirdPerson/Input/Actions/IA_AbilityA"));
+	MY_CDO_FINDER(UI_MainWidgetClass,	TEXT("/Game/ThirdPerson/UI/WBP_MyUIMainWidget"));
+}
+
+AMyCharacter* AMyPlayerController::GetMyCharacter() const
+{
+	return CastChecked<AMyCharacter>(Super::GetCharacter());
+}
+
+FVector2f AMyPlayerController::GetCrossHairPos()
+{
+	return UI_MainWidget ? UI_MainWidget->GetCrossHairPos() : FVector2f::ZeroVector;
+}
+
+FVector AMyPlayerController::GetCameraLocation()
+{
+	auto* CamMgr = PlayerCameraManager.Get();
+	return CamMgr ? CamMgr->GetCameraLocation() : FVector::ZeroVector;
 }
 
 void AMyPlayerController::SetupInputComponent()
@@ -50,8 +65,9 @@ void AMyPlayerController::SetupInputComponent()
 		MY_BIND_INPUT_ACTION(IA_Look,		Triggered);
 		MY_BIND_INPUT_ACTION(IA_Jump,		Started);
 		MY_BIND_INPUT_ACTION(IA_Jump,		Completed);
+		MY_BIND_INPUT_ACTION(IA_Confirm,	Started);
 		MY_BIND_INPUT_ACTION(IA_Cancel,		Started);
-		MY_BIND_INPUT_ACTION(IA_Skill,		Started);
+		MY_BIND_INPUT_ACTION(IA_AbilityA,	Started);
 
 	#undef MY_BIND_INPUT_ACTION
 }
@@ -60,74 +76,12 @@ void AMyPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	UIMainWidget = MyUI::CreateWidget(this, UIMainWidgetClass);
+	UI_MainWidget = MyUI::CreateWidget(this, UI_MainWidgetClass);
 }
 
 void AMyPlayerController::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	UpdateAimingActor();
-}
-
-void AMyPlayerController::UpdateAimingActor()
-{
-	if (!UIMainWidget)
-		return;
-
-	if (!PlayerCameraManager)
-		return;
-
-	auto* Ch = GetCharacter();
-	if (!Ch)
-		return;
-
-	auto CameraLoc = PlayerCameraManager->GetCameraLocation();
-
-	auto Pos = UIMainWidget->GetCrossHairPos();
-
-	auto LineStart = CameraLoc;
-	auto LineEnd   = LineStart + GetControlRotation().Vector() * 1000.0;
-
-	if (!AimingActorAsyncTraceDelegate.IsBound())
-		AimingActorAsyncTraceDelegate.BindUObject(this, &ThisClass::AimingActorAsyncTraceResult);
-
-	FCollisionQueryParams	QueryParams;
-	QueryParams.AddIgnoredActor(Ch);
-
-	FCollisionObjectQueryParams ObjectQueryParams;
-	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
-	ObjectQueryParams.AddObjectTypesToQuery(ECC_PhysicsBody);
-	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
-
-//	DrawDebugLine(GetWorld(), LineStart, LineEnd, FColor::Red, false, 5.0f, 0, 0);
-
-	GetWorld()->AsyncLineTraceByObjectType(	EAsyncTraceType::Single,
-											LineStart,
-											LineEnd,
-											ObjectQueryParams,
-											QueryParams,
-											&AimingActorAsyncTraceDelegate);
-}
-
-void AMyPlayerController::AimingActorAsyncTraceResult(const FTraceHandle& TraceHandle, FTraceDatum& Data)
-{
-	auto* Actor = Data.OutHits.Num() > 0 ? Data.OutHits[0].GetActor() : nullptr;
-	SetAimingActor(Actor);
-}
-
-void AMyPlayerController::SetAimingActor(AActor* Actor)
-{
-	auto* Cur = AimingActor.Get();
-	if (Cur == Actor)
-		return;
-
-	if (Cur)
-		MyActorUtil::SetOverlayMaterial(Cur, nullptr);
-
-	AimingActor = Actor;
-
-	if (Actor)
-		MyActorUtil::SetOverlayMaterial(Actor, MI_SelectionOverlay);
 }
 
 void AMyPlayerController::IA_Move_Triggered(const FInputActionValue& Value)
@@ -154,20 +108,12 @@ void AMyPlayerController::IA_Look_Triggered(const FInputActionValue& Value)
 	FVector2D LookAxisVector = Value.Get<FVector2D>();
 
 	AddYawInput(  LookAxisVector.X);
-
-	if (auto* Ch = GetCharacter())
-	{
-		if (Ch->OnLookPitchInputAdded(LookAxisVector.Y))
-			return;
-	}
-
 	AddPitchInput(LookAxisVector.Y);
-
 }
 
 void AMyPlayerController::IA_Jump_Started(const FInputActionValue& Value)
 {
-	auto* Ch = GetCharacter();
+	auto* Ch = GetMyCharacter();
 	if (!Ch) return;
 	
 	Ch->Jump();
@@ -175,33 +121,35 @@ void AMyPlayerController::IA_Jump_Started(const FInputActionValue& Value)
 
 void AMyPlayerController::IA_Jump_Completed(const FInputActionValue& Value)
 {
-	auto* Ch = GetCharacter();
+	auto* Ch = GetMyCharacter();
 	if (!Ch)
 		return;
 
 	Ch->StopJumping();
 }
 
-void AMyPlayerController::IA_Skill_Started(const FInputActionValue& Value)
+void AMyPlayerController::IA_AbilityA_Started(const FInputActionValue& Value)
 {
-	auto* Ch = GetCharacter();
+	auto* Ch = GetMyCharacter();
 	if (!Ch)
 		return;
 
 	Ch->SetCurrentAbility(EMyAbility::UltraHand);
-	auto* UltraHand = Ch->GetUltraHandComponent();
-	if (!UltraHand)
+}
+
+
+void AMyPlayerController::IA_Confirm_Started(const FInputActionValue& Value)
+{
+	auto* Ch = GetMyCharacter();
+	if (!Ch)
 		return;
 
-	if (UltraHand->GetTargetActor())
-		UltraHand->FuseFusibleObject();
-	else
-		UltraHand->SetTargetActor(AimingActor.Get());
+	Ch->IA_Confirm_Started();
 }
 
 void AMyPlayerController::IA_Cancel_Started(const FInputActionValue& Value)
 {
-	auto* Ch = GetCharacter();
+	auto* Ch = GetMyCharacter();
 	if (!Ch)
 		return;
 

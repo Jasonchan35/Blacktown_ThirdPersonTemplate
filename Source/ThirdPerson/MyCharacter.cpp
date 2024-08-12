@@ -12,6 +12,7 @@
 #include "InputActionValue.h"
 
 #include "Abilities/MyUltraHandComponent.h"
+#include "MyPlayerController.h"
 
 //////////////////////////////////////////////////////////////////////////
 // AMyCharacter
@@ -65,23 +66,36 @@ void AMyCharacter::SetCurrentAbility(EMyAbility Ability)
 
 	CurrentAbility = Ability;
 
-	if (Ability != EMyAbility::UltraHand)
+	if (CurrentAbilityComponent)
+		CurrentAbilityComponent->SetAbilityActive(false);
+
+	switch (Ability)
 	{
-		UltraHandComponent->SetTargetActor(nullptr);
+		case EMyAbility::UltraHand:	CurrentAbilityComponent = UltraHandComponent; break;
+		default:					CurrentAbilityComponent = nullptr; break;
 	}
-}
 
-bool AMyCharacter::OnLookPitchInputAdded(float Pitch)
-{
-	if (CurrentAbility == EMyAbility::UltraHand)
-		return UltraHandComponent->OnLookPitchInputAdded(Pitch);
-
-	return false;
+	if (CurrentAbilityComponent)
+		CurrentAbilityComponent->SetAbilityActive(true);
 }
 
 void AMyCharacter::BeginPlay()
 {
-	// Call the base class
 	Super::BeginPlay();
 }
 
+void AMyCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+}
+
+AMyPlayerController* AMyCharacter::GetPlayerController()
+{
+	return GetController<AMyPlayerController>();
+}
+
+void AMyCharacter::IA_Confirm_Started()
+{
+	if (CurrentAbilityComponent)
+		CurrentAbilityComponent->IA_Confirm_Started();
+}

@@ -14,4 +14,6 @@ class UMyUIMainWidget : public UMyUIWidgetBase
 public:
 	FVector2f	GetCrossHairPos();
 
+protected:
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 };
