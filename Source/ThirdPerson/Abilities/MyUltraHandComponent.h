@@ -28,7 +28,13 @@ class UMyUltraHandComponent : public UMyAbilityComponent
 	float		HoldTargetDampingFactor;
 
 	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	float		HoldTargetDropDistance;
+	float		HoldTargetDistanceMin;
+
+	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	float		HoldTargetDistanceMax;
+
+	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	float		HoldTargetHeightMax;
 
 	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	float		FuseTargetDampingFactor;
@@ -48,6 +54,8 @@ public:
 
 protected:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction) override;
+
+	virtual void IA_DPad_Triggered(const FVector2D& Value) override;
 	virtual void IA_Confirm_Started() override;
 	virtual void IA_Cancel_Started() override;
 
@@ -72,8 +80,10 @@ private:
 	bool DoTickHoldTarget(float DeltaTime);
 	bool UpdateTargetActorLocation(float DeltaTime);
 
-	FQuat	HoldTargetRelativeQuat;
-	FVector	HoldTargetRelativeLocation;
+	void AddHoldTargetRelativeLocation(const FVector2D& Value);
+
+	FQuat	HoldTargetQuat;
+	FVector	HoldTargetVector;
 
 	struct FFusable
 	{
@@ -95,6 +105,8 @@ private:
 
 	bool DoSearchFusable();
 
+	FCollisionQueryParams	QueryParams;
+
 	TArray<FOverlapResult>	SearchFusableTempOverlaps;
 	FFusable				SearchFusableAsyncSweep;
 	FTraceDelegate			SearchFusableAsyncSweepDelegate;
@@ -106,4 +118,7 @@ private:
 
 	void TickFuseTarget(float DeltaTime);
 	bool DoTickFuseTarget(float DeltaTime);
+
+	void SetActorState(AActor* InActor, bool bGravity, UMaterialInterface* OverlayMaterial);
 };
+

@@ -3,6 +3,8 @@
 #include "PhysicsEngine/PhysicsConstraintComponent.h"
 #include "MyFusedComponent.generated.h"
 
+class UMyFusedGroup;
+
 UCLASS()
 class AMyInteractableActor : public AActor
 {
@@ -13,7 +15,9 @@ public:
 struct MyFuseHelper
 {
 	static void FuseActors(AActor* Actor1, AActor* Actor2, const FVector& Point);
-
+	static void AddMember(UMyFusedGroup* Group, UMyFusedComponent* Comp);
+	static void RemoveMember(UMyFusedGroup* Group, UMyFusedComponent* Comp);
+	static UMyFusedGroup* FindGroup(AActor* Actor);
 };
 
 UCLASS()
@@ -26,14 +30,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<AActor>	GlueMeshClass;
 
+	TArrayView<UMyFusedComponent*>	GetMembers() { return Members; }
+
 friend struct MyFuseHelper;
 protected:
 
-	void AddMember(UMyFusedComponent* Comp);
-	void RemoveMember(UMyFusedComponent* Comp);
 
 	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
-	TArray<UMyFusedComponent*>	FusedComponents;
+	TArray<UMyFusedComponent*>	Members;
 };
 
 UCLASS()
@@ -43,8 +47,9 @@ class UMyFusedComponent : public USceneComponent
 
 public:
 
+	UMyFusedGroup*	GetFusedGroup() { return FusedGroup.Get(); }
+
 friend struct MyFuseHelper;
-friend class UMyFusedGroup;
 protected:
 	UFUNCTION()
 	void OnConstraintBroken(int32 ConstraintIndex);

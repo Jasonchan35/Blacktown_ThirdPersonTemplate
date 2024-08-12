@@ -45,6 +45,7 @@ public:
 
 	AMyPlayerController* GetPlayerController();
 
+	void IA_DPad_Triggered(const FVector2D& Value);
 	void IA_Confirm_Started();
 	void IA_Cancel_Started();
 

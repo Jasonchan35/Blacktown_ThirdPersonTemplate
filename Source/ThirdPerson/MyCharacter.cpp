@@ -94,6 +94,13 @@ AMyPlayerController* AMyCharacter::GetPlayerController()
 	return GetController<AMyPlayerController>();
 }
 
+
+void AMyCharacter::IA_DPad_Triggered(const FVector2D& Value)
+{
+	if (CurrentAbilityComponent)
+		CurrentAbilityComponent->IA_DPad_Triggered(Value);
+}
+
 void AMyCharacter::IA_Confirm_Started()
 {
 	if (CurrentAbilityComponent)

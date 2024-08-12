@@ -8,10 +8,13 @@ UMyUltraHandComponent::UMyUltraHandComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.TickGroup = TG_PrePhysics;
 	
-	SearchTargetRadius  = 1000;
+	SearchTargetRadius  = 800;
 	SearchFusableRadius = 100;
 
-	HoldTargetDropDistance = 100;
+	HoldTargetDistanceMin = 50;
+	HoldTargetDistanceMax = 700;
+
+	HoldTargetHeightMax   =  850;
 
 	HoldTargetDampingFactor = 8;
 	FuseTargetDampingFactor = 3;
@@ -46,11 +49,7 @@ void UMyUltraHandComponent::SetTargetActor(AActor* Actor)
 	if (Cur)
 	{
 		if (auto* PrimComp = Cur->FindComponentByClass<UPrimitiveComponent>())
-		{
-			PrimComp->SetEnableGravity(true);
-			PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
-			PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
-		}
+			SetActorState(Cur, true, nullptr);
 
 		MyActorUtil::SetOverlayMaterial(Cur, nullptr);
 	}
@@ -59,8 +58,40 @@ void UMyUltraHandComponent::SetTargetActor(AActor* Actor)
 	Fusable.Reset();
 
 	if (Actor)
-		MyActorUtil::SetOverlayMaterial(Actor, MI_SelectionOverlay);
+		SetActorState(Actor, true, MI_SelectionOverlay);
 }
+
+void UMyUltraHandComponent::SetActorState(AActor* InActor, bool bGravity, UMaterialInterface* OverlayMaterial)
+{
+	if (!InActor)
+		return;
+
+	auto Func = [&](AActor* Actor) {
+		if (!Actor)
+			return;
+		if (auto* Prim = Actor->FindComponentByClass<UPrimitiveComponent>())
+		{
+			Prim->SetEnableGravity(bGravity);
+			Prim->SetPhysicsLinearVelocity(FVector::ZeroVector);
+			Prim->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+
+			MyActorUtil::SetOverlayMaterial(Actor, OverlayMaterial);
+		}
+	};
+
+	Func(InActor);
+
+	auto* Group = MyFuseHelper::FindGroup(InActor);
+	if (!Group)
+		return;
+
+	for (auto* Member : Group->GetMembers())
+	{
+		if (Member)
+			Func(Member->GetOwner());
+	}
+}
+
 
 void UMyUltraHandComponent::SetAbilityActive(bool Active)
 {
@@ -106,6 +137,14 @@ void UMyUltraHandComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 	}
 }
 
+void UMyUltraHandComponent::IA_DPad_Triggered(const FVector2D& Value)
+{
+	switch (Mode)
+	{
+		case EMyUltraHandMode::HoldTarget: AddHoldTargetRelativeLocation(Value); break;
+	}
+}
+
 void UMyUltraHandComponent::SetSearchTargetMode()
 {
 	Mode = EMyUltraHandMode::SearchTarget;
@@ -137,7 +176,7 @@ bool UMyUltraHandComponent::DoTickSearchTarget(float DeltaTime)
 	if (!SearchTargetAsyncTraceDelegate.IsBound())
 		SearchTargetAsyncTraceDelegate.BindUObject(this, &ThisClass::SearchTargetAsyncTraceResult);
 
-	FCollisionQueryParams	QueryParams;
+	QueryParams.ClearIgnoredActors();
 	QueryParams.AddIgnoredActor(Ch);
 
 	FCollisionObjectQueryParams ObjectQueryParams;
@@ -177,14 +216,18 @@ void UMyUltraHandComponent::SetHoldTargetMode()
 		return;
 	}
 
+	SetActorState(Target, false, MI_SelectionOverlay);
+
 	auto Rot = PC->GetControlRotation();
 
 	auto Yaw  = Rot.Yaw;
 	auto InvQuat = FRotator(0, Yaw, 0).Quaternion().Inverse();
-	HoldTargetRelativeQuat		= Target->GetActorQuat() * InvQuat;
-	HoldTargetRelativeLocation	= Target->GetActorLocation() - Ch->GetActorLocation() + FVector(0, 0, 60);
+	HoldTargetQuat	= InvQuat * Target->GetActorQuat();
 
-	HoldTargetRelativeLocation = InvQuat * HoldTargetRelativeLocation;
+	auto TargetLoc	= Target->GetActorLocation();
+	auto ChLoc		= Ch->GetActorLocation();
+
+	HoldTargetVector = InvQuat * (TargetLoc - ChLoc);
 }
 
 void UMyUltraHandComponent::TickHoldTarget(float DeltaTime)
@@ -270,36 +313,49 @@ bool UMyUltraHandComponent::UpdateTargetActorLocation(float DeltaTime)
 	if (!PC || !Ch)
 		return false;
 
-	auto ControlRot = PC->GetControlRotation();
-
-	auto Forward = FVector::ForwardVector;
-
-	auto LineStart = Ch->GetActorLocation();
-	auto LineEnd   = LineStart + FRotator(0, ControlRot.Yaw, 0).RotateVector(HoldTargetRelativeLocation);
-
-	auto GoalLoc = LineEnd;
-
-	auto Distance = FVector::Distance(GoalLoc, Target->GetActorLocation());
-	if (Distance > HoldTargetDropDistance)
-		return false;
-
-	DrawDebugLine(GetWorld(), LineStart, LineEnd, FColor::Green, false, 0, 0, 0);
-
+	auto ChLoc = Ch->GetActorLocation();
 	auto TargetLoc = Target->GetActorLocation();
-	auto Delta = GoalLoc - TargetLoc;
+
+	auto DeltaZ = TargetLoc.Z - ChLoc.Z;
+	auto DistXY = FVector::DistXY(TargetLoc, ChLoc);
+
+	if (DistXY < HoldTargetDistanceMin - 10) return false;
+	if (DistXY > HoldTargetDistanceMax + 10) return false;
+	if (DeltaZ < -HoldTargetHeightMax  - 10) return false;
+	if (DeltaZ >  HoldTargetHeightMax  + 10) return false;
+
+	auto ControlRot = PC->GetControlRotation();
+	ControlRot.Pitch = FMath::ClampAngle(ControlRot.Pitch, -80, 80);
+
+	auto Vector = HoldTargetVector;
+
+	Vector.Z = FMath::Tan(FMath::DegreesToRadians(ControlRot.Pitch)) * HoldTargetVector.X;
+
+	Vector.X = FMath::Clamp(Vector.X, HoldTargetDistanceMin, HoldTargetDistanceMax);
+	Vector.Z = FMath::Clamp(Vector.Z, -HoldTargetHeightMax, HoldTargetHeightMax);
+	Vector.Z += 60; // add some extra Z to life object above the ground
+
+	auto GoalLoc   = ChLoc + FRotator(0, ControlRot.Yaw, 0).RotateVector(Vector);
+
+	DrawDebugLine(GetWorld(), ChLoc, GoalLoc, FColor::Green, false, 0, 0, 0);
 
 	FVector NewLoc  = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, HoldTargetDampingFactor);
-	FQuat   NewQuat = ControlRot.Quaternion() * HoldTargetRelativeQuat;
+	FQuat   NewQuat = ControlRot.Quaternion() * HoldTargetQuat;
 
 	Target->SetActorLocationAndRotation(NewLoc, NewQuat, true, nullptr, ETeleportType::ResetPhysics);
 	if (auto* PrimComp = Target->FindComponentByClass<UPrimitiveComponent>())
 	{
 		PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
 		PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
-		PrimComp->SetEnableGravity(false);
 	}
 
 	return true;
+}
+
+void UMyUltraHandComponent::AddHoldTargetRelativeLocation(const FVector2D& Value)
+{
+	auto& X = HoldTargetVector.X;
+	X = FMath::Clamp(X + Value.Y * 10, HoldTargetDistanceMin, HoldTargetDistanceMax);
 }
 
 bool UMyUltraHandComponent::DoSearchFusable()
@@ -317,9 +373,23 @@ bool UMyUltraHandComponent::DoSearchFusable()
 	if (!TargetPrimComp)
 		return false;
 
-	FCollisionQueryParams	QueryParams;
-	QueryParams.AddIgnoredActor(Target);
+	QueryParams.ClearIgnoredActors();
+
+	if (auto* Group = MyFuseHelper::FindGroup(Target))
+	{
+		for(auto& Member : Group->GetMembers())
+		{
+			if (Member)
+				QueryParams.AddIgnoredActor(Member->GetOwner());
+		}
+	}
+	else
+	{
+		QueryParams.AddIgnoredActor(Target);
+	}
 	QueryParams.AddIgnoredActor(GetOwner());
+
+
 
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
@@ -386,16 +456,13 @@ void UMyUltraHandComponent::SearchFusableAsyncSweepResult(const FTraceHandle& Tr
 	{
 		auto* Actor = Cast<AActor>(Hit.GetActor());
 
-		auto Dis			= Hit.Distance;
-		auto MinDisSq		= Out.Distance;
-
-		if ((Dis * Dis) > MinDisSq)
+		if (Hit.Distance > Out.Distance)
 			continue;
 
 		Out.DestActor		= Actor;
 
 		Out.GoalLocation	= Hit.Location;
-		Out.Distance		= Dis;
+		Out.Distance		= Hit.Distance;
 
 		Out.SourcePoint		= Hit.ImpactPoint - Hit.Location + Hit.TraceStart;
 		Out.ImpactPoint		= Hit.ImpactPoint;
@@ -404,6 +471,9 @@ void UMyUltraHandComponent::SearchFusableAsyncSweepResult(const FTraceHandle& Tr
 
 void UMyUltraHandComponent::SetFuseTargetMode()
 {
+	if (!Fusable)
+		return;
+
 	Mode = EMyUltraHandMode::FuseTarget;
 	FuseTargetTimeRemain = 1; // try to fuse object within some time
 }

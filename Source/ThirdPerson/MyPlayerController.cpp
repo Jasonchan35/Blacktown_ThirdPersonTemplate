@@ -10,9 +10,10 @@
 AMyPlayerController::AMyPlayerController()
 {
 	MY_CDO_FINDER(InputMappingContext,	TEXT("/Game/ThirdPerson/Input/IMC_Default"));
-	MY_CDO_FINDER(IA_Jump,				TEXT("/Game/ThirdPerson/Input/Actions/IA_Jump"));
+	MY_CDO_FINDER(IA_DPad,				TEXT("/Game/ThirdPerson/Input/Actions/IA_DPad"));
 	MY_CDO_FINDER(IA_Move,				TEXT("/Game/ThirdPerson/Input/Actions/IA_Move"));
 	MY_CDO_FINDER(IA_Look,				TEXT("/Game/ThirdPerson/Input/Actions/IA_Look"));
+	MY_CDO_FINDER(IA_Jump,				TEXT("/Game/ThirdPerson/Input/Actions/IA_Jump"));
 	MY_CDO_FINDER(IA_Confirm,			TEXT("/Game/ThirdPerson/Input/Actions/IA_Confirm"));
 	MY_CDO_FINDER(IA_Cancel,			TEXT("/Game/ThirdPerson/Input/Actions/IA_Cancel"));
 	MY_CDO_FINDER(IA_AbilityA,			TEXT("/Game/ThirdPerson/Input/Actions/IA_AbilityA"));
@@ -61,6 +62,7 @@ void AMyPlayerController::SetupInputComponent()
 	#define MY_BIND_INPUT_ACTION(Action, Event) \
 		BindAction(TEXT(#Action), Action, ETriggerEvent::Event, &ThisClass::Action##_##Event); \
 	//---
+		MY_BIND_INPUT_ACTION(IA_DPad,		Triggered);
 		MY_BIND_INPUT_ACTION(IA_Move,		Triggered);
 		MY_BIND_INPUT_ACTION(IA_Look,		Triggered);
 		MY_BIND_INPUT_ACTION(IA_Jump,		Started);
@@ -82,6 +84,14 @@ void AMyPlayerController::BeginPlay()
 void AMyPlayerController::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+}
+
+void AMyPlayerController::IA_DPad_Triggered(const FInputActionValue& Value)
+{
+	FVector2D Vec = Value.Get<FVector2D>();
+
+	if (auto* Ch = GetMyCharacter())
+		Ch->IA_DPad_Triggered(Vec);
 }
 
 void AMyPlayerController::IA_Move_Triggered(const FInputActionValue& Value)

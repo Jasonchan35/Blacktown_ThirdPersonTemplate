@@ -15,6 +15,9 @@ class AMyPlayerController : public APlayerController
 	TObjectPtr<class UInputMappingContext> InputMappingContext;
 
 	UPROPERTY(Category = Input, EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<class UInputAction> IA_DPad;
+
+	UPROPERTY(Category = Input, EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<class UInputAction> IA_Move;
 
 	UPROPERTY(Category = Input, EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
@@ -54,6 +57,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
+	void IA_DPad_Triggered	(const FInputActionValue& Value);
 	void IA_Move_Triggered	(const FInputActionValue& Value);
 	void IA_Look_Triggered	(const FInputActionValue& Value);
 

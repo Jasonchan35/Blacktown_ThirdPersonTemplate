@@ -1,5 +1,17 @@
 #include "MyFusedComponent.h"
 
+UMyFusedGroup* MyFuseHelper::FindGroup(AActor* Actor)
+{
+	if (!Actor)
+		return nullptr;
+
+	auto* Fuse = Actor->FindComponentByClass<UMyFusedComponent>();
+	if (!Fuse)
+		return nullptr;
+
+	return Fuse->GetFusedGroup();
+}
+
 void MyFuseHelper::FuseActors(AActor* Actor1, AActor* Actor2, const FVector& Point)
 {
 	if (!Actor1 || !Actor2)
@@ -11,30 +23,37 @@ void MyFuseHelper::FuseActors(AActor* Actor1, AActor* Actor2, const FVector& Poi
 	if (!Prim1 || !Prim2)
 		return;
 
-	auto* Fuse1 = MyActorUtil::NewComponent<UMyFusedComponent>(Actor1);
-	auto* Fuse2 = MyActorUtil::NewComponent<UMyFusedComponent>(Actor2);
-
 	UMyFusedGroup* Group = nullptr;
 
-	if (Fuse1->FusedGroup)
-		Group = Fuse1->FusedGroup;
-	else if (Fuse2->FusedGroup)
-		Group = Fuse2->FusedGroup;
-	else
-		Group = NewObject<UMyFusedGroup>();
-	
-	Group->FusedComponents.Remove(nullptr);
+	{ // pick exists group if possible
+		auto* Group1 = FindGroup(Actor1);
+		auto* Group2 = FindGroup(Actor2);
 
-	Group->AddMember(Fuse1);
-	Group->AddMember(Fuse2);
+		if (Group1)
+			Group = Group1;
+		else if (Group2)
+			Group = Group2;
+		else
+			Group = NewObject<UMyFusedGroup>();	
+	}
 
-	Prim1->SetSimulatePhysics(true);
-	Prim2->SetSimulatePhysics(true);
+	Group->Members.Remove(nullptr);
 
-	auto* Constraint = MyActorUtil::NewComponent<UPhysicsConstraintComponent>(Fuse1);
+	auto* NewFuse1 = MyActorUtil::NewComponent<UMyFusedComponent>(Actor1);
+	auto* NewFuse2 = MyActorUtil::NewComponent<UMyFusedComponent>(Actor2);
 
-	Constraint->OnConstraintBroken.AddDynamic(Fuse1, &UMyFusedComponent::OnConstraintBroken);
-	Constraint->OnConstraintBroken.AddDynamic(Fuse2, &UMyFusedComponent::OnConstraintBroken);
+	AddMember(Group, NewFuse1);
+	AddMember(Group, NewFuse2);
+
+	//Prim1->SetSimulatePhysics(true);
+	//Prim2->SetSimulatePhysics(true);
+
+	auto* Constraint = MyActorUtil::NewComponent<UPhysicsConstraintComponent>(NewFuse1);
+
+	Constraint->SetDisableCollision(true);
+
+	Constraint->OnConstraintBroken.AddDynamic(NewFuse1, &UMyFusedComponent::OnConstraintBroken);
+	Constraint->OnConstraintBroken.AddDynamic(NewFuse2, &UMyFusedComponent::OnConstraintBroken);
 
 	Constraint->SetWorldLocation(Point);
 
@@ -57,7 +76,14 @@ void MyFuseHelper::FuseActors(AActor* Actor1, AActor* Actor2, const FVector& Poi
 		return;
 
 	GlueMesh->AttachToActor(Actor1, FAttachmentTransformRules::KeepWorldTransform);
-	Fuse1->GlueMesh = GlueMesh;
+
+	if (auto* GluePrim = GlueMesh->FindComponentByClass<UPrimitiveComponent>())
+	{
+		GluePrim->SetEnableGravity(false);
+		GluePrim->SetSimulatePhysics(false);
+	}
+
+	NewFuse1->GlueMesh = GlueMesh;
 }
 
 UMyFusedGroup::UMyFusedGroup()
@@ -67,43 +93,43 @@ UMyFusedGroup::UMyFusedGroup()
 
 void UMyFusedComponent::OnConstraintBroken(int32 ConstraintIndex)
 {
-	if (!Constraint)
-		return;
-	
 	this->DestroyComponent();
 }
 
-void UMyFusedGroup::AddMember(UMyFusedComponent* Comp)
+void MyFuseHelper::AddMember(UMyFusedGroup* Group, UMyFusedComponent* Comp)
 {
 	if (!Comp)
 		return;
 
-	if (Comp->FusedGroup == this)
+	if (Comp->FusedGroup == Group)
 		return;
 
 	if (Comp->FusedGroup)
-		Comp->FusedGroup->RemoveMember(Comp);
+		RemoveMember(Comp->FusedGroup, Comp);
 
-	Comp->FusedGroup = this;
-
-	FusedComponents.Add(Comp);
+	Comp->FusedGroup = Group;
+	Group->Members.Add(Comp);
 }
 
-void UMyFusedGroup::RemoveMember(UMyFusedComponent* Comp)
+void MyFuseHelper::RemoveMember(UMyFusedGroup* Group, UMyFusedComponent* Comp)
 {
 	if (!Comp)
 		return;
 
-	if (Comp->FusedGroup != this)
+	if (Comp->FusedGroup != Group)
 		return;
 
 	Comp->FusedGroup = nullptr;
-	FusedComponents.Remove(Comp);
+	Group->Members.Remove(Comp);
 }
 
 void UMyFusedComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
 {
 	Super::OnComponentDestroyed(bDestroyingHierarchy);
+
+	if (FusedGroup)
+		MyFuseHelper::RemoveMember(FusedGroup, this);
+
 	if (Constraint)
 		Constraint->DestroyComponent();
 
