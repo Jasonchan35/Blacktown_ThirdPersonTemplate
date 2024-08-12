@@ -12,6 +12,8 @@ class UMyAbilityComponent : public UActorComponent
 	GENERATED_BODY()
 public:
 	virtual void IA_Confirm_Started() {}
+	virtual void IA_Cancel_Started() {}
+
 	virtual void SetAbilityActive(bool Active) {}
 
 	AMyCharacter*	GetMyCharacter();

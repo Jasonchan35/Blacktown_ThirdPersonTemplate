@@ -19,13 +19,19 @@ class UMyUltraHandComponent : public UMyAbilityComponent
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	float		DampingFactor;
+	float		SearchTargetRadius;
 
-	UPROPERTY(VisibleAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	float		SearchFusableRadius;
 
-	UPROPERTY(VisibleAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	TWeakObjectPtr<AActor>	TargetActor;
+	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	float		HoldTargetDampingFactor;
+
+	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	float		HoldTargetDropDistance;
+
+	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	float		FuseTargetDampingFactor;
 
 	UPROPERTY(Category = Input, EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<class UMaterialInterface> MI_SelectionOverlay;
@@ -38,14 +44,16 @@ public:
 
 	AActor* GetTargetActor() { return TargetActor.Get(); }
 
-	void	FuseFusableObject();
 	bool	OnLookPitchInputAdded(float Pitch);
 
 protected:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction) override;
 	virtual void IA_Confirm_Started() override;
+	virtual void IA_Cancel_Started() override;
 
 private:
+	TWeakObjectPtr<AActor>	TargetActor;
+
 	EMyUltraHandMode Mode = EMyUltraHandMode::None;
 
 // Search Target Mode

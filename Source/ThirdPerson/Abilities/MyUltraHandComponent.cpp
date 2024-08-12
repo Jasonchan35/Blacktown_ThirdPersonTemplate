@@ -1,17 +1,20 @@
 #include "MyUltraHandComponent.h"
-#include "MyFuseComponent.h"
 #include "../MyCharacter.h"
 #include "../MyPlayerController.h"
+#include "MyFusedComponent.h"
 
 UMyUltraHandComponent::UMyUltraHandComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.TickGroup = TG_PrePhysics;
-	DampingFactor = 8;
-
-	Fusable.Reset();
+	
+	SearchTargetRadius  = 1000;
 	SearchFusableRadius = 100;
-	SearchFusableAsyncSweep.Reset();
+
+	HoldTargetDropDistance = 100;
+
+	HoldTargetDampingFactor = 8;
+	FuseTargetDampingFactor = 3;
 
 	MY_CDO_FINDER(MI_SelectionOverlay,	TEXT("/Game/ThirdPerson/Materials/M_SelectionOverlay"));
 }
@@ -22,6 +25,15 @@ void UMyUltraHandComponent::IA_Confirm_Started()
 	{
 		case EMyUltraHandMode::SearchTarget:	SetHoldTargetMode(); break;
 		case EMyUltraHandMode::HoldTarget:		SetFuseTargetMode(); break;
+	}
+}
+
+void UMyUltraHandComponent::IA_Cancel_Started()
+{
+	switch (Mode)
+	{
+		case EMyUltraHandMode::SearchTarget:	SetAbilityActive(false); break;
+		case EMyUltraHandMode::HoldTarget:		SetSearchTargetMode(); break;
 	}
 }
 
@@ -71,7 +83,20 @@ void UMyUltraHandComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
+#if 1 // Debug
 	MY_LOG_ON_SCREEN(L"UltraHand Mode='{}'", Mode);
+
+	if (TargetActor.Get())
+	{
+		if (auto* Ch = GetMyCharacter())
+		{
+			DrawDebugLine(GetWorld(),
+				Ch->GetActorLocation(),
+				TargetActor->GetActorLocation(),
+				FColor::Green);
+		}
+	}
+#endif
 
 	switch (Mode)
 	{
@@ -107,7 +132,7 @@ bool UMyUltraHandComponent::DoTickSearchTarget(float DeltaTime)
 	auto CrossHairPos = PC->GetCrossHairPos();
 
 	auto LineStart = CameraLoc;
-	auto LineEnd   = LineStart + PC->GetControlRotation().Vector() * 1000.0;
+	auto LineEnd   = LineStart + PC->GetControlRotation().Vector() * SearchTargetRadius;
 
 	if (!SearchTargetAsyncTraceDelegate.IsBound())
 		SearchTargetAsyncTraceDelegate.BindUObject(this, &ThisClass::SearchTargetAsyncTraceResult);
@@ -134,7 +159,7 @@ bool UMyUltraHandComponent::DoTickSearchTarget(float DeltaTime)
 void UMyUltraHandComponent::SearchTargetAsyncTraceResult(const FTraceHandle& TraceHandle, FTraceDatum& Data)
 {
 	auto* Actor = Data.OutHits.Num() > 0 ? Data.OutHits[0].GetActor() : nullptr;
-	SetTargetActor(Actor);
+	SetTargetActor(Cast<AActor>(Actor));
 }
 
 void UMyUltraHandComponent::SetHoldTargetMode()
@@ -157,7 +182,9 @@ void UMyUltraHandComponent::SetHoldTargetMode()
 	auto Yaw  = Rot.Yaw;
 	auto InvQuat = FRotator(0, Yaw, 0).Quaternion().Inverse();
 	HoldTargetRelativeQuat		= Target->GetActorQuat() * InvQuat;
-	HoldTargetRelativeLocation	= Target->GetActorLocation() - Ch->GetActorLocation() + FVector(0, 0, 50);
+	HoldTargetRelativeLocation	= Target->GetActorLocation() - Ch->GetActorLocation() + FVector(0, 0, 60);
+
+	HoldTargetRelativeLocation = InvQuat * HoldTargetRelativeLocation;
 }
 
 void UMyUltraHandComponent::TickHoldTarget(float DeltaTime)
@@ -201,23 +228,32 @@ bool UMyUltraHandComponent::DoTickFuseTarget(float DeltaTime)
 	if (!PrimComp)
 		return false;
 
-	PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
-	PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
-	PrimComp->SetEnableGravity(true);
+// Move TargetActor to Hit Fusable Actor
+
+	auto Direction = (Fusable.ImpactPoint - Fusable.SourcePoint).GetSafeNormal();
 
 	auto TargetLoc = Target->GetActorLocation();
-	auto GoalLoc   = Fusable.GoalLocation;
+	auto GoalLoc   = Fusable.GoalLocation + Direction * 50; // Move a little bit more to hit DestActor
 
-	FVector NewLoc  = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, DampingFactor);
+	FVector NewLoc  = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, FuseTargetDampingFactor);
 	FQuat   NewQuat = Target->GetActorQuat();
 
 	FHitResult Hit;
 	auto bHit = Target->SetActorLocationAndRotation(NewLoc, NewQuat, true, &Hit, ETeleportType::ResetPhysics);
+	PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
+	PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
 
 	if (!bHit || Hit.GetActor() != Fusable.DestActor)
-		return true; // Not hit or hit something else
+		return true; // Not hit yet or hit something else
 
-	FuseFusableObject();
+//----
+	MyFuseHelper::FuseActors(	Fusable.SourceActor.Get(),
+								Fusable.DestActor.Get(),
+								Fusable.ImpactPoint);
+
+	Fusable.Reset();
+
+	SetAbilityActive(false);
 
 	return true;
 }
@@ -244,8 +280,7 @@ bool UMyUltraHandComponent::UpdateTargetActorLocation(float DeltaTime)
 	auto GoalLoc = LineEnd;
 
 	auto Distance = FVector::Distance(GoalLoc, Target->GetActorLocation());
-	const float DropTargetDistance = 300;
-	if (Distance > DropTargetDistance)
+	if (Distance > HoldTargetDropDistance)
 		return false;
 
 	DrawDebugLine(GetWorld(), LineStart, LineEnd, FColor::Green, false, 0, 0, 0);
@@ -253,7 +288,7 @@ bool UMyUltraHandComponent::UpdateTargetActorLocation(float DeltaTime)
 	auto TargetLoc = Target->GetActorLocation();
 	auto Delta = GoalLoc - TargetLoc;
 
-	FVector NewLoc  = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, DampingFactor);
+	FVector NewLoc  = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, HoldTargetDampingFactor);
 	FQuat   NewQuat = ControlRot.Quaternion() * HoldTargetRelativeQuat;
 
 	Target->SetActorLocationAndRotation(NewLoc, NewQuat, true, nullptr, ETeleportType::ResetPhysics);
@@ -271,6 +306,8 @@ bool UMyUltraHandComponent::DoSearchFusable()
 {
 	Fusable = SearchFusableAsyncSweep;
 	SearchFusableAsyncSweep.Reset();
+
+	SearchFusableAsyncSweep.Distance = SearchFusableRadius;
 
 	auto* Target = TargetActor.Get();
 	if (!Target)
@@ -290,7 +327,7 @@ bool UMyUltraHandComponent::DoSearchFusable()
 
 //---- check overlapped actor within radius
 	{
-		float SphereRadius = SearchFusableRadius + MyActorUtil::GetBoundingSphereRadius(Target, true);
+		float SphereRadius = 50 + SearchFusableRadius + MyActorUtil::GetBoundingSphereRadius(Target, true);
 
 		SearchFusableTempOverlaps.Reset();
 		bool overlapped = GetWorld()->OverlapMultiByObjectType(
@@ -347,13 +384,15 @@ void UMyUltraHandComponent::SearchFusableAsyncSweepResult(const FTraceHandle& Tr
 
 	for (auto& Hit : Data.OutHits)
 	{
+		auto* Actor = Cast<AActor>(Hit.GetActor());
+
 		auto Dis			= Hit.Distance;
 		auto MinDisSq		= Out.Distance;
 
-		if (Out.DestActor.Get() && (Dis * Dis) > MinDisSq)
+		if ((Dis * Dis) > MinDisSq)
 			continue;
 
-		Out.DestActor		= Hit.GetActor();
+		Out.DestActor		= Actor;
 
 		Out.GoalLocation	= Hit.Location;
 		Out.Distance		= Dis;
@@ -366,42 +405,5 @@ void UMyUltraHandComponent::SearchFusableAsyncSweepResult(const FTraceHandle& Tr
 void UMyUltraHandComponent::SetFuseTargetMode()
 {
 	Mode = EMyUltraHandMode::FuseTarget;
-	FuseTargetTimeRemain = 3; // try to fuse object within some time
-}
-
-void UMyUltraHandComponent::FuseFusableObject()
-{
-	auto* DestActor = Fusable.DestActor.Get();
-	if (!DestActor)
-		return;
-
-	auto* SourceActor = Fusable.SourceActor.Get();
-	if (!SourceActor)
-		return;
-
-	auto* SourcePrim = SourceActor->FindComponentByClass<UPrimitiveComponent>();
-	auto*   DestPrim =   DestActor->FindComponentByClass<UPrimitiveComponent>();
-
-	if (!SourcePrim || !DestPrim)
-		return;
-
-	auto* FuseComp = MyActorUtil::GetOrNewComponent<UMyFuseComponent>(SourceActor);
-	if (!FuseComp)
-		return;
-
-	SourcePrim->SetSimulatePhysics(true);
-	  DestPrim->SetSimulatePhysics(true);
-
-	FuseComp->SetWorldLocation(Fusable.SourcePoint);
-
-	FuseComp->SetLinearXLimit(ELinearConstraintMotion::LCM_Locked, 0);
-	FuseComp->SetLinearYLimit(ELinearConstraintMotion::LCM_Locked, 0);
-	FuseComp->SetLinearZLimit(ELinearConstraintMotion::LCM_Locked, 0);
-
-	FuseComp->SetAngularDriveMode(EAngularDriveMode::TwistAndSwing);
-	FuseComp->SetAngularTwistLimit( EAngularConstraintMotion::ACM_Locked, 0);
-	FuseComp->SetAngularSwing1Limit(EAngularConstraintMotion::ACM_Locked, 0);
-	FuseComp->SetAngularSwing2Limit(EAngularConstraintMotion::ACM_Locked, 0);
-
-	FuseComp->SetConstrainedComponents(SourcePrim, NAME_None, DestPrim, NAME_None);
+	FuseTargetTimeRemain = 1; // try to fuse object within some time
 }

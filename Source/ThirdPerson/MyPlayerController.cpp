@@ -113,46 +113,32 @@ void AMyPlayerController::IA_Look_Triggered(const FInputActionValue& Value)
 
 void AMyPlayerController::IA_Jump_Started(const FInputActionValue& Value)
 {
-	auto* Ch = GetMyCharacter();
-	if (!Ch) return;
-	
-	Ch->Jump();
+	if (auto* Ch = GetMyCharacter())
+		Ch->Jump();
 }
 
 void AMyPlayerController::IA_Jump_Completed(const FInputActionValue& Value)
 {
-	auto* Ch = GetMyCharacter();
-	if (!Ch)
-		return;
-
-	Ch->StopJumping();
+	if (auto* Ch = GetMyCharacter())
+		Ch->StopJumping();
 }
 
 void AMyPlayerController::IA_AbilityA_Started(const FInputActionValue& Value)
 {
-	auto* Ch = GetMyCharacter();
-	if (!Ch)
-		return;
-
-	Ch->SetCurrentAbility(EMyAbility::UltraHand);
+	if (auto* Ch = GetMyCharacter())
+		Ch->SetCurrentAbility(EMyAbility::UltraHand);
 }
 
 
 void AMyPlayerController::IA_Confirm_Started(const FInputActionValue& Value)
 {
-	auto* Ch = GetMyCharacter();
-	if (!Ch)
-		return;
-
-	Ch->IA_Confirm_Started();
+	if (auto* Ch = GetMyCharacter())
+		Ch->IA_Confirm_Started();
 }
 
 void AMyPlayerController::IA_Cancel_Started(const FInputActionValue& Value)
 {
-	auto* Ch = GetMyCharacter();
-	if (!Ch)
-		return;
-
-	Ch->SetCurrentAbility(EMyAbility::None);
+	if (auto* Ch = GetMyCharacter())
+		Ch->IA_Cancel_Started();
 }
 

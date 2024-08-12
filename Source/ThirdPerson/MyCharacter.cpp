@@ -99,3 +99,9 @@ void AMyCharacter::IA_Confirm_Started()
 	if (CurrentAbilityComponent)
 		CurrentAbilityComponent->IA_Confirm_Started();
 }
+
+void AMyCharacter::IA_Cancel_Started()
+{
+	if (CurrentAbilityComponent)
+		CurrentAbilityComponent->IA_Cancel_Started();
+}

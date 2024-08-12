@@ -46,6 +46,7 @@ public:
 	AMyPlayerController* GetPlayerController();
 
 	void IA_Confirm_Started();
+	void IA_Cancel_Started();
 
 protected:
 	virtual void BeginPlay() override;

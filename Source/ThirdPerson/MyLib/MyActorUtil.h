@@ -57,8 +57,8 @@ inline COMP_TYPE* MyActorUtil::NewComponent(PARANT* Parent, const FName& Name /*
 		return nullptr;
 
 	auto* Actor = GetActor(Parent);
-	auto  CompName = Name != NAME_None ? Name : COMP_TYPE::StaticClass()->GetFName();
-
+	auto CompName = MakeUniqueObjectName(Actor, COMP_TYPE::StaticClass(), Name);
+	
 	auto* OutComp = NewObject<COMP_TYPE>(Actor, CompName);
 
 	if constexpr (std::is_base_of_v<USceneComponent, COMP_TYPE>)
