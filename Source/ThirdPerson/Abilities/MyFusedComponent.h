@@ -18,6 +18,9 @@ struct MyFuseHelper
 	static void AddMember(UMyFusedGroup* Group, UMyFusedComponent* Comp);
 	static void RemoveMember(UMyFusedGroup* Group, UMyFusedComponent* Comp);
 	static UMyFusedGroup* FindGroup(AActor* Actor);
+
+	static bool MatchActorOrGroup(AActor* Actor, AActor* ActorOrGroup);
+	static bool MatchGroup(AActor* Actor, UMyFusedGroup* Group);
 };
 
 UCLASS()
@@ -31,6 +34,8 @@ public:
 	TSubclassOf<AActor>	GlueMeshClass;
 
 	TArrayView<UMyFusedComponent*>	GetMembers() { return Members; }
+
+	bool	HasMember(AActor* Actor);
 
 friend struct MyFuseHelper;
 protected:

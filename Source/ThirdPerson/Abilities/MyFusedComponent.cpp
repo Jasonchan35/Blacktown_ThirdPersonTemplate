@@ -12,6 +12,34 @@ UMyFusedGroup* MyFuseHelper::FindGroup(AActor* Actor)
 	return Fuse->GetFusedGroup();
 }
 
+bool MyFuseHelper::MatchActorOrGroup(AActor* Actor, AActor* ActorOrGroup)
+{
+	if (!Actor || !ActorOrGroup)
+		return false;
+
+	if (Actor == ActorOrGroup)
+		return true;
+
+	return MatchGroup(Actor, FindGroup(ActorOrGroup));
+}
+
+bool MyFuseHelper::MatchGroup(AActor* Actor, UMyFusedGroup* Group)
+{
+	if (!Group)
+		return false;
+
+	for (auto& Member : Group->GetMembers())
+	{
+		if (Member)
+		{
+			if (Member->GetOwner() == Actor)
+				return true;
+		}
+	}
+
+	return false;
+}
+
 void MyFuseHelper::FuseActors(AActor* Actor1, AActor* Actor2, const FVector& Point)
 {
 	if (!Actor1 || !Actor2)
@@ -89,6 +117,20 @@ void MyFuseHelper::FuseActors(AActor* Actor1, AActor* Actor2, const FVector& Poi
 UMyFusedGroup::UMyFusedGroup()
 {
 	MY_CDO_FINDER(GlueMeshClass, TEXT("/Game/ThirdPerson/Blueprints/Objects/BP_FusedGlue"));
+}
+
+bool UMyFusedGroup::HasMember(AActor* Actor)
+{
+	if (!Actor)
+		return false;
+
+	for (auto& Comp : Members)
+	{
+		if (Comp && Comp->GetOwner() == Actor)
+			return true;
+	}
+
+	return false;
 }
 
 void UMyFusedComponent::OnConstraintBroken(int32 ConstraintIndex)

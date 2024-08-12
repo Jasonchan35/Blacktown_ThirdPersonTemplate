@@ -9,7 +9,7 @@ UMyUltraHandComponent::UMyUltraHandComponent()
 	PrimaryComponentTick.TickGroup = TG_PrePhysics;
 	
 	SearchTargetRadius  = 800;
-	SearchFusableRadius = 100;
+	MaxFusableDistance  = 100;
 
 	HoldTargetDistanceMin = 50;
 	HoldTargetDistanceMax = 700;
@@ -47,51 +47,49 @@ void UMyUltraHandComponent::SetTargetActor(AActor* Actor)
 		return;
 
 	if (Cur)
-	{
-		if (auto* PrimComp = Cur->FindComponentByClass<UPrimitiveComponent>())
-			SetActorState(Cur, true, nullptr);
-
-		MyActorUtil::SetOverlayMaterial(Cur, nullptr);
-	}
+		SetActorOrGroupState(Cur, true, nullptr);
 
 	TargetActor = Actor;
 	Fusable.Reset();
 
 	if (Actor)
-		SetActorState(Actor, true, MI_SelectionOverlay);
+		SetActorOrGroupState(Actor, true, MI_SelectionOverlay);
 }
 
-void UMyUltraHandComponent::SetActorState(AActor* InActor, bool bGravity, UMaterialInterface* OverlayMaterial)
+void UMyUltraHandComponent::SetActorOrGroupState(AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial)
 {
-	if (!InActor)
+	if (!Actor)
 		return;
 
-	auto Func = [&](AActor* Actor) {
-		if (!Actor)
-			return;
-		if (auto* Prim = Actor->FindComponentByClass<UPrimitiveComponent>())
-		{
-			Prim->SetEnableGravity(bGravity);
-			Prim->SetPhysicsLinearVelocity(FVector::ZeroVector);
-			Prim->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
-
-			MyActorUtil::SetOverlayMaterial(Actor, OverlayMaterial);
-		}
-	};
-
-	Func(InActor);
-
-	auto* Group = MyFuseHelper::FindGroup(InActor);
-	if (!Group)
-		return;
-
-	for (auto* Member : Group->GetMembers())
+	if (auto* Group = MyFuseHelper::FindGroup(Actor))
 	{
-		if (Member)
-			Func(Member->GetOwner());
+		for (auto* Member : Group->GetMembers())
+		{
+			if (Member)
+				SetActorState(Member->GetOwner(), SimulatePhysics, OverlayMaterial);
+		}
+	}
+	else
+	{
+		SetActorState(Actor, SimulatePhysics, OverlayMaterial);
 	}
 }
 
+void UMyUltraHandComponent::SetActorState(AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial)
+{
+	if (!Actor)
+		return;
+
+	auto* Prim = Actor->FindComponentByClass<UPrimitiveComponent>();
+	if (!Prim)
+		return;
+
+	Prim->SetSimulatePhysics(SimulatePhysics);
+	Prim->SetPhysicsLinearVelocity(FVector::ZeroVector);
+	Prim->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+
+	MyActorUtil::SetOverlayMaterial(Actor, OverlayMaterial);
+}
 
 void UMyUltraHandComponent::SetAbilityActive(bool Active)
 {
@@ -273,10 +271,10 @@ bool UMyUltraHandComponent::DoTickFuseTarget(float DeltaTime)
 
 // Move TargetActor to Hit Fusable Actor
 
-	auto Direction = (Fusable.ImpactPoint - Fusable.SourcePoint).GetSafeNormal();
+	auto Direction = (Fusable.SourcePoint - Fusable.ImpactPoint).GetSafeNormal();
 
 	auto TargetLoc = Target->GetActorLocation();
-	auto GoalLoc   = Fusable.GoalLocation + Direction * 50; // Move a little bit more to hit DestActor
+	auto GoalLoc   = TargetLoc + Direction * (Fusable.Distance + 100);
 
 	FVector NewLoc  = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, FuseTargetDampingFactor);
 	FQuat   NewQuat = Target->GetActorQuat();
@@ -286,7 +284,7 @@ bool UMyUltraHandComponent::DoTickFuseTarget(float DeltaTime)
 	PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
 	PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
 
-	if (!bHit || Hit.GetActor() != Fusable.DestActor)
+	if (!bHit || Hit.GetActor() != Fusable.SourceActor)
 		return true; // Not hit yet or hit something else
 
 //----
@@ -363,17 +361,14 @@ bool UMyUltraHandComponent::DoSearchFusable()
 	Fusable = SearchFusableAsyncSweep;
 	SearchFusableAsyncSweep.Reset();
 
-	SearchFusableAsyncSweep.Distance = SearchFusableRadius;
+	SearchFusableAsyncSweep.Distance = MaxFusableDistance;
 
 	auto* Target = TargetActor.Get();
 	if (!Target)
 		return false;
 
-	auto* TargetPrimComp = Target->FindComponentByClass<UPrimitiveComponent>();
-	if (!TargetPrimComp)
-		return false;
-
 	QueryParams.ClearIgnoredActors();
+	QueryParams.AddIgnoredActor(GetOwner());
 
 	if (auto* Group = MyFuseHelper::FindGroup(Target))
 	{
@@ -387,9 +382,6 @@ bool UMyUltraHandComponent::DoSearchFusable()
 	{
 		QueryParams.AddIgnoredActor(Target);
 	}
-	QueryParams.AddIgnoredActor(GetOwner());
-
-
 
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
@@ -397,15 +389,13 @@ bool UMyUltraHandComponent::DoSearchFusable()
 
 //---- check overlapped actor within radius
 	{
-		float SphereRadius = 50 + SearchFusableRadius + MyActorUtil::GetBoundingSphereRadius(Target, true);
-
 		SearchFusableTempOverlaps.Reset();
 		bool overlapped = GetWorld()->OverlapMultiByObjectType(
 											SearchFusableTempOverlaps,
 											Target->GetActorLocation(),
 											FQuat::Identity,
 											ObjectQueryParams,
-											FCollisionShape::MakeSphere(SphereRadius),
+											FCollisionShape::MakeSphere(SearchTargetRadius),
 											QueryParams);
 		if (!overlapped)
 			return true;
@@ -413,29 +403,41 @@ bool UMyUltraHandComponent::DoSearchFusable()
 
 //----- Find out actual impact point by Async Sweep from TargetActor to each overlapped actor
 	{
-		SearchFusableAsyncSweep.SourceActor = TargetActor;
-
 		if (!SearchFusableAsyncSweepDelegate.IsBound())
 			SearchFusableAsyncSweepDelegate.BindUObject(this, &ThisClass::SearchFusableAsyncSweepResult);
 
-		auto SweepStart	= Target->GetActorLocation();
-		auto SweepRot	= Target->GetActorQuat();
-		auto SweepShape	= TargetPrimComp->GetCollisionShape();
+		auto SweepEnd = Target->GetActorLocation();
 
-		for (auto& Overlap : SearchFusableTempOverlaps)
+		for (int i = 0; i < SearchFusableTempOverlaps.Num(); i++)
 		{
-			if (!Overlap.GetActor())
+			auto& Overlap = SearchFusableTempOverlaps[i];
+			auto* SourceActor = Overlap.GetActor();
+
+			if (!SourceActor)
 				continue;
 
-			auto SweepEnd   = Overlap.GetActor()->GetActorLocation();
+			auto* Prim = SourceActor->FindComponentByClass<UPrimitiveComponent>();
+			if (!Prim)
+				continue;
 
+			auto SweepStart = SourceActor->GetActorLocation();
+			auto SweepRot	= SourceActor->GetActorQuat();
+			auto SweepShape	= Prim->GetCollisionShape();
+
+			QueryParams.ClearIgnoredActors();
+			QueryParams.AddIgnoredActor(SourceActor);
+
+			// DrawDebugLine(GetWorld(), SweepStart, SweepEnd, FColor::Cyan);
+
+			// Sweep nearby objects against Target Actor or Group
 			GetWorld()->AsyncSweepByObjectType(
 							EAsyncTraceType::Single,
 							SweepStart, SweepEnd, SweepRot,
 							ObjectQueryParams,
 							SweepShape,
 							QueryParams,
-							&SearchFusableAsyncSweepDelegate);
+							&SearchFusableAsyncSweepDelegate,
+							i);
 		}
 	}
 	return true;
@@ -443,25 +445,35 @@ bool UMyUltraHandComponent::DoSearchFusable()
 
 void UMyUltraHandComponent::SearchFusableAsyncSweepResult(const FTraceHandle& TraceHandle, FTraceDatum& Data)
 {
+	int Index = Data.UserData;
+	if (Index < 0 || Index >= SearchFusableTempOverlaps.Num())
+		return;
+
+	auto& Overlap = SearchFusableTempOverlaps[Index];
+	if (!Overlap.GetActor())
+		return;
+
 	auto* Target = TargetActor.Get();
 	if (!Target)
 		return;
 
-	auto& Out = SearchFusableAsyncSweep;
+	auto* Group = MyFuseHelper::FindGroup(Target);
 
-	if (Out.SourceActor != Target)
-		return; // TargetActor changed during Async call, so drop it
+	auto& Out = SearchFusableAsyncSweep;
 
 	for (auto& Hit : Data.OutHits)
 	{
-		auto* Actor = Cast<AActor>(Hit.GetActor());
+		if (Hit.Distance >= Out.Distance)
+			continue;
+		
+		auto* Actor = Hit.GetActor();
 
-		if (Hit.Distance > Out.Distance)
+		if (Actor != Target && !MyFuseHelper::MatchGroup(Actor, Group))
 			continue;
 
+		Out.SourceActor		= Overlap.GetActor();
 		Out.DestActor		= Actor;
 
-		Out.GoalLocation	= Hit.Location;
 		Out.Distance		= Hit.Distance;
 
 		Out.SourcePoint		= Hit.ImpactPoint - Hit.Location + Hit.TraceStart;

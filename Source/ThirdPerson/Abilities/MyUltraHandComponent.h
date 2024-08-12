@@ -22,7 +22,7 @@ class UMyUltraHandComponent : public UMyAbilityComponent
 	float		SearchTargetRadius;
 
 	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	float		SearchFusableRadius;
+	float		MaxFusableDistance;
 
 	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	float		HoldTargetDampingFactor;
@@ -95,7 +95,6 @@ private:
 		TWeakObjectPtr<AActor>	SourceActor;
 		TWeakObjectPtr<AActor>	DestActor;
 
-		FVector		GoalLocation;
 		float		Distance;
 		FVector		SourcePoint;
 		FVector		ImpactPoint;
@@ -119,6 +118,7 @@ private:
 	void TickFuseTarget(float DeltaTime);
 	bool DoTickFuseTarget(float DeltaTime);
 
-	void SetActorState(AActor* InActor, bool bGravity, UMaterialInterface* OverlayMaterial);
+	void SetActorOrGroupState	(AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial);
+	void SetActorState			(AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial);
 };
 
