@@ -78,15 +78,19 @@ private:
 
 	void TickHoldTarget(float DeltaTime);
 	bool DoTickHoldTarget(float DeltaTime);
-	bool HoldTargetUpdateLocation(float DeltaTime);
+	bool MoveTargetLocation(float DeltaTime);
 
-	FTraceDelegate HoldTargetAsyncTraceDelegate;
-	void HoldTargetAsyncTraceResult(const FTraceHandle& TraceHandle, FTraceDatum& Data);
+	FTraceDelegate MoveTargetAsyncDelegate;
+	void MoveTargetAsyncResult(const FTraceHandle& TraceHandle, FTraceDatum& Data);
 
-	int		HoldTargetAsyncTraceCount = 0;
-	float	HoldTargetAsyncTraceMinDistance = 0;
-	FVector	HoldTargetAsyncTraceDirection;
-	FQuat	HoldTargetAsyncTraceQuat;
+	struct FMoveTargetAsyncData
+	{
+		int		Count = 0;
+		float	MinDistance = 0;
+		FVector	Direction;
+		FQuat	Quat;
+	};
+	FMoveTargetAsyncData	MoveTargetAsyncData;
 
 	void MoveTargetForward(float V);
 
@@ -114,9 +118,9 @@ private:
 	bool DoSearchFusable();
 
 	TArray<FOverlapResult>	SearchFusableTempOverlaps;
-	FFusable				SearchFusableAsyncSweep;
-	FTraceDelegate			SearchFusableAsyncSweepDelegate;
-	void SearchFusableAsyncSweepResult(const FTraceHandle& TraceHandle, FTraceDatum& Data);
+	FFusable				SearchFusableAsyncData;
+	FTraceDelegate			SearchFusableAsyncDelegate;
+	void SearchFusableAsyncResult(const FTraceHandle& TraceHandle, FTraceDatum& Data);
 
 	void SetFuseTargetMode();
 

@@ -35,7 +35,7 @@ void UMyUltraHandComponent::IA_Cancel_Started()
 {
 	switch (Mode)
 	{
-		case EMyUltraHandMode::SearchTarget:	SetAbilityActive(false); break;
+//		case EMyUltraHandMode::SearchTarget:	SetAbilityActive(false); break;
 		case EMyUltraHandMode::HoldTarget:		SetSearchTargetMode(); break;
 	}
 }
@@ -201,7 +201,7 @@ void UMyUltraHandComponent::TickHoldTarget(float DeltaTime)
 
 bool UMyUltraHandComponent::DoTickHoldTarget(float DeltaTime)
 {
-	if (!HoldTargetUpdateLocation(DeltaTime))
+	if (!MoveTargetLocation(DeltaTime))
 		return false;
 
 	if (!DoSearchFusable())
@@ -242,7 +242,7 @@ bool UMyUltraHandComponent::DoTickFuseTarget(float DeltaTime)
 	return true;
 }
 
-bool UMyUltraHandComponent::HoldTargetUpdateLocation(float DeltaTime)
+bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 {
 	auto* Target = TargetActor.Get();
 	if (!Target) // Lost Target
@@ -281,11 +281,14 @@ bool UMyUltraHandComponent::HoldTargetUpdateLocation(float DeltaTime)
 	DrawDebugLine(GetWorld(), ChLoc, GoalLoc, FColor::Green, false, 0, 0, 0);
 
 	FVector NewLoc  = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, HoldTargetDampingFactor);
-	FQuat   NewQuat = ControlRot.Quaternion() * HoldTargetQuat;
-
 	FVector MoveVector = NewLoc - TargetLoc;
-	FVector MoveDir    = MoveVector.GetSafeNormal();
-	float   MoveDistance = MoveVector.Length();
+
+	auto& AsyncData = MoveTargetAsyncData;
+
+	AsyncData.Count			= 0;
+	AsyncData.MinDistance	= MoveVector.Length();
+	AsyncData.Direction		= MoveVector.GetSafeNormal();
+	AsyncData.Quat			= ControlRot.Quaternion() * HoldTargetQuat;
 
 	FCollisionQueryParams	QueryParams;
 	QueryParams.AddIgnoredActor(Target);
@@ -306,13 +309,8 @@ bool UMyUltraHandComponent::HoldTargetUpdateLocation(float DeltaTime)
 
 	auto* World = GetWorld();
 
-	HoldTargetAsyncTraceCount = 0;
-	HoldTargetAsyncTraceMinDistance	= MoveDistance;
-	HoldTargetAsyncTraceDirection	= MoveDir;
-	HoldTargetAsyncTraceQuat		= NewQuat;
-
-	if (!HoldTargetAsyncTraceDelegate.IsBound())
-		HoldTargetAsyncTraceDelegate.BindUObject(this, &ThisClass::HoldTargetAsyncTraceResult);
+	if (!MoveTargetAsyncDelegate.IsBound())
+		MoveTargetAsyncDelegate.BindUObject(this, &ThisClass::MoveTargetAsyncResult);
 
 	auto AsyncSweep = [&](AActor* Actor, const FTransform& Tran) -> void
 	{
@@ -321,21 +319,20 @@ bool UMyUltraHandComponent::HoldTargetUpdateLocation(float DeltaTime)
 			return;
 
 		World->AsyncSweepByObjectType(	EAsyncTraceType::Single,
-										Tran.GetLocation() + MoveDir * 10,
-										Tran.GetLocation() + MoveDir * (MoveDistance + 10),
+										Tran.GetLocation() + AsyncData.Direction * 10,
+										Tran.GetLocation() + AsyncData.Direction * (AsyncData.MinDistance + 10),
 										Tran.GetRotation(),
 										ObjectQueryParams,
 										Prim->GetCollisionShape(),
 										QueryParams,
-										&HoldTargetAsyncTraceDelegate,
-										HoldTargetAsyncTraceCount);
+										&MoveTargetAsyncDelegate);
 
-		HoldTargetAsyncTraceCount++;
+		AsyncData.Count++;
 	};
 
 	auto& TargetTran = Target->GetActorTransform();
 	auto NewTran = TargetTran;
-	NewTran.SetLocation(TargetLoc + MoveDir * MoveDistance);
+	NewTran.SetLocation(NewLoc);
 
 	auto InvTargetTran = TargetTran.Inverse();
 	auto ReletiveTran = InvTargetTran * NewTran;
@@ -354,32 +351,34 @@ bool UMyUltraHandComponent::HoldTargetUpdateLocation(float DeltaTime)
 	return true;
 }
 
-void UMyUltraHandComponent::HoldTargetAsyncTraceResult(const FTraceHandle& TraceHandle, FTraceDatum& Data)
+void UMyUltraHandComponent::MoveTargetAsyncResult(const FTraceHandle& TraceHandle, FTraceDatum& Data)
 {
-	auto Index = Data.UserData;
-	auto& MinDistance = HoldTargetAsyncTraceMinDistance;
+	auto& AsyncData = MoveTargetAsyncData;
 
 	for (auto& Hit : Data.OutHits)
 	{
-		MinDistance = FMath::Min(Hit.Distance, MinDistance);
+		AsyncData.MinDistance = FMath::Min(Hit.Distance, AsyncData.MinDistance);
 	}
 
-	if (Index == HoldTargetAsyncTraceCount - 1)
-	{
-		// The last one
-		auto* Target = TargetActor.Get();
-		if (!Target)
-			return;
+	AsyncData.Count--;
+	if (AsyncData.Count != 0)
+		return;
 
-		if (FMath::IsNearlyZero(MinDistance))
-			return;
+	if (Mode != EMyUltraHandMode::HoldTarget)
+		return;
 
-		auto NewTran = Target->GetActorTransform();
-		NewTran.SetLocation(NewTran.GetLocation() + HoldTargetAsyncTraceDirection * MinDistance);
-		NewTran.SetRotation(HoldTargetAsyncTraceQuat);
+	auto* Target = TargetActor.Get();
+	if (!Target)
+		return;
 
-		MyFuseHelper::SetActorTransform(Target, NewTran);
-	}
+	if (FMath::IsNearlyZero(AsyncData.MinDistance))
+		return;
+
+	auto NewTran = Target->GetActorTransform();
+	NewTran.SetLocation(NewTran.GetLocation() + AsyncData.Direction * AsyncData.MinDistance);
+	NewTran.SetRotation(AsyncData.Quat);
+
+	MyFuseHelper::SetActorTransform(Target, NewTran);
 }
 
 void UMyUltraHandComponent::MoveTargetForward(float V)
@@ -390,10 +389,10 @@ void UMyUltraHandComponent::MoveTargetForward(float V)
 
 bool UMyUltraHandComponent::DoSearchFusable()
 {
-	Fusable = SearchFusableAsyncSweep;
-	SearchFusableAsyncSweep.Reset();
+	Fusable = SearchFusableAsyncData;
+	SearchFusableAsyncData.Reset();
 
-	SearchFusableAsyncSweep.Distance = MaxFusableDistance;
+	SearchFusableAsyncData.Distance = MaxFusableDistance;
 
 	auto* Target = TargetActor.Get();
 	if (!Target)
@@ -432,8 +431,8 @@ bool UMyUltraHandComponent::DoSearchFusable()
 
 //----- Find out actual impact point by Async Sweep from TargetActor to each overlapped actor
 	{
-		if (!SearchFusableAsyncSweepDelegate.IsBound())
-			SearchFusableAsyncSweepDelegate.BindUObject(this, &ThisClass::SearchFusableAsyncSweepResult);
+		if (!SearchFusableAsyncDelegate.IsBound())
+			SearchFusableAsyncDelegate.BindUObject(this, &ThisClass::SearchFusableAsyncResult);
 
 		auto SweepEnd = Target->GetActorLocation();
 
@@ -465,14 +464,14 @@ bool UMyUltraHandComponent::DoSearchFusable()
 							ObjectQueryParams,
 							SweepShape,
 							QueryParams,
-							&SearchFusableAsyncSweepDelegate,
+							&SearchFusableAsyncDelegate,
 							i);
 		}
 	}
 	return true;
 }
 
-void UMyUltraHandComponent::SearchFusableAsyncSweepResult(const FTraceHandle& TraceHandle, FTraceDatum& Data)
+void UMyUltraHandComponent::SearchFusableAsyncResult(const FTraceHandle& TraceHandle, FTraceDatum& Data)
 {
 	int Index = Data.UserData;
 	if (Index < 0 || Index >= SearchFusableTempOverlaps.Num())
@@ -488,11 +487,11 @@ void UMyUltraHandComponent::SearchFusableAsyncSweepResult(const FTraceHandle& Tr
 
 	auto* Group = MyFuseHelper::FindGroup(Target);
 
-	auto& Out = SearchFusableAsyncSweep;
+	auto& AsyncData = SearchFusableAsyncData;
 
 	for (auto& Hit : Data.OutHits)
 	{
-		if (Hit.Distance >= Out.Distance)
+		if (Hit.Distance >= AsyncData.Distance)
 			continue;
 		
 		auto* Actor = Hit.GetActor();
@@ -500,13 +499,13 @@ void UMyUltraHandComponent::SearchFusableAsyncSweepResult(const FTraceHandle& Tr
 		if (Actor != Target && !MyFuseHelper::MatchGroup(Actor, Group))
 			continue;
 
-		Out.SourceActor		= Overlap.GetActor();
-		Out.DestActor		= Actor;
-		Out.Location		= Hit.Location;
-		Out.Distance		= Hit.Distance;
+		AsyncData.SourceActor	= Overlap.GetActor();
+		AsyncData.DestActor		= Actor;
+		AsyncData.Location		= Hit.Location;
+		AsyncData.Distance		= Hit.Distance;
 
-		Out.SourcePoint		= Hit.ImpactPoint - Hit.Location + Hit.TraceStart;
-		Out.ImpactPoint		= Hit.ImpactPoint;
+		AsyncData.SourcePoint	= Hit.ImpactPoint - Hit.Location + Hit.TraceStart;
+		AsyncData.ImpactPoint	= Hit.ImpactPoint;
 	}
 }
 

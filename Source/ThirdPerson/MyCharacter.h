@@ -35,7 +35,7 @@ class AMyCharacter : public ACharacter
 	UPROPERTY(Category = Camera, VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UCameraComponent> FollowCamera;
 
-	UPROPERTY(Category = Skill, VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(Category = Ability, VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UMyUltraHandComponent>	UltraHandComponent;
 
 public:

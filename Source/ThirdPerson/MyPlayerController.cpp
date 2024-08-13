@@ -79,6 +79,9 @@ void AMyPlayerController::BeginPlay()
 	Super::BeginPlay();
 
 	UI_MainWidget = MyUI::CreateWidget(this, UI_MainWidgetClass);
+
+	if (auto* Ch = GetMyCharacter())
+		Ch->SetCurrentAbility(EMyAbility::UltraHand);
 }
 
 void AMyPlayerController::Tick(float DeltaSeconds)
