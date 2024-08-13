@@ -6,8 +6,8 @@
 UMyUltraHandComponent::UMyUltraHandComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-	PrimaryComponentTick.TickGroup = TG_PrePhysics;
-	
+//	PrimaryComponentTick.TickGroup = TG_PrePhysics;
+
 	SearchTargetRadius  = 800;
 	MaxFusableDistance  = 100;
 
@@ -19,7 +19,7 @@ UMyUltraHandComponent::UMyUltraHandComponent()
 	HoldTargetDampingFactor = 8;
 	FuseTargetDampingFactor = 3;
 
-	MY_CDO_FINDER(MI_SelectionOverlay,	TEXT("/Game/ThirdPerson/Materials/M_SelectionOverlay"));
+	MY_CDO_FINDER(MI_SelectionOverlay, TEXT("/Game/ThirdPerson/Materials/M_SelectionOverlay"));
 }
 
 void UMyUltraHandComponent::IA_Confirm_Started()
@@ -47,48 +47,13 @@ void UMyUltraHandComponent::SetTargetActor(AActor* Actor)
 		return;
 
 	if (Cur)
-		SetActorOrGroupState(Cur, true, nullptr);
+		MyFuseHelper::SetActorState(Cur, true, nullptr);
 
 	TargetActor = Actor;
 	Fusable.Reset();
 
 	if (Actor)
-		SetActorOrGroupState(Actor, true, MI_SelectionOverlay);
-}
-
-void UMyUltraHandComponent::SetActorOrGroupState(AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial)
-{
-	if (!Actor)
-		return;
-
-	if (auto* Group = MyFuseHelper::FindGroup(Actor))
-	{
-		for (auto* Member : Group->GetMembers())
-		{
-			if (Member)
-				SetActorState(Member->GetOwner(), SimulatePhysics, OverlayMaterial);
-		}
-	}
-	else
-	{
-		SetActorState(Actor, SimulatePhysics, OverlayMaterial);
-	}
-}
-
-void UMyUltraHandComponent::SetActorState(AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial)
-{
-	if (!Actor)
-		return;
-
-	auto* Prim = Actor->FindComponentByClass<UPrimitiveComponent>();
-	if (!Prim)
-		return;
-
-	Prim->SetSimulatePhysics(SimulatePhysics);
-	Prim->SetPhysicsLinearVelocity(FVector::ZeroVector);
-	Prim->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
-
-	MyActorUtil::SetOverlayMaterial(Actor, OverlayMaterial);
+		MyFuseHelper::SetActorState(Actor, true, MI_SelectionOverlay);
 }
 
 void UMyUltraHandComponent::SetAbilityActive(bool Active)
@@ -214,7 +179,7 @@ void UMyUltraHandComponent::SetHoldTargetMode()
 		return;
 	}
 
-	SetActorState(Target, false, MI_SelectionOverlay);
+	MyFuseHelper::SetActorState(Target, false, MI_SelectionOverlay);
 
 	auto Rot = PC->GetControlRotation();
 
@@ -256,10 +221,6 @@ void UMyUltraHandComponent::TickFuseTarget(float DeltaTime)
 
 bool UMyUltraHandComponent::DoTickFuseTarget(float DeltaTime)
 {
-	FuseTargetTimeRemain -= DeltaTime;
-	if (FuseTargetTimeRemain <= 0)
-		return false;
-
 	auto* Target = TargetActor.Get();
 
 	if (!Fusable || !Target)
@@ -269,32 +230,14 @@ bool UMyUltraHandComponent::DoTickFuseTarget(float DeltaTime)
 	if (!PrimComp)
 		return false;
 
-// Move TargetActor to Hit Fusable Actor
-
-	auto Direction = (Fusable.SourcePoint - Fusable.ImpactPoint).GetSafeNormal();
-
-	auto TargetLoc = Target->GetActorLocation();
-	auto GoalLoc   = TargetLoc + Direction * (Fusable.Distance + 100);
-
-	FVector NewLoc  = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, FuseTargetDampingFactor);
-	FQuat   NewQuat = Target->GetActorQuat();
-
-	FHitResult Hit;
-	auto bHit = Target->SetActorLocationAndRotation(NewLoc, NewQuat, true, &Hit, ETeleportType::ResetPhysics);
-	PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
-	PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
-
-	if (!bHit || Hit.GetActor() != Fusable.SourceActor)
-		return true; // Not hit yet or hit something else
-
-//----
 	MyFuseHelper::FuseActors(	Fusable.SourceActor.Get(),
+								Fusable.SourcePoint,
 								Fusable.DestActor.Get(),
 								Fusable.ImpactPoint);
 
 	Fusable.Reset();
 
-	SetAbilityActive(false);
+	SetSearchTargetMode();
 
 	return true;
 }
@@ -338,15 +281,12 @@ bool UMyUltraHandComponent::UpdateTargetActorLocation(float DeltaTime)
 	DrawDebugLine(GetWorld(), ChLoc, GoalLoc, FColor::Green, false, 0, 0, 0);
 
 	FVector NewLoc  = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, HoldTargetDampingFactor);
-	FQuat   NewQuat = ControlRot.Quaternion() * HoldTargetQuat;
+//	FQuat   NewQuat = ControlRot.Quaternion() * HoldTargetQuat;
 
-	Target->SetActorLocationAndRotation(NewLoc, NewQuat, true, nullptr, ETeleportType::ResetPhysics);
-	if (auto* PrimComp = Target->FindComponentByClass<UPrimitiveComponent>())
-	{
-		PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
-		PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
-	}
+	auto NewTran = Target->GetActorTransform();
+	NewTran.SetLocation(NewLoc);
 
+	MyFuseHelper::SetActorTransform(Target, NewTran);
 	return true;
 }
 
@@ -375,7 +315,7 @@ bool UMyUltraHandComponent::DoSearchFusable()
 		for(auto& Member : Group->GetMembers())
 		{
 			if (Member)
-				QueryParams.AddIgnoredActor(Member->GetOwner());
+				QueryParams.AddIgnoredActor(Member);
 		}
 	}
 	else
@@ -473,7 +413,7 @@ void UMyUltraHandComponent::SearchFusableAsyncSweepResult(const FTraceHandle& Tr
 
 		Out.SourceActor		= Overlap.GetActor();
 		Out.DestActor		= Actor;
-
+		Out.Location		= Hit.Location;
 		Out.Distance		= Hit.Distance;
 
 		Out.SourcePoint		= Hit.ImpactPoint - Hit.Location + Hit.TraceStart;
@@ -487,5 +427,4 @@ void UMyUltraHandComponent::SetFuseTargetMode()
 		return;
 
 	Mode = EMyUltraHandMode::FuseTarget;
-	FuseTargetTimeRemain = 1; // try to fuse object within some time
 }

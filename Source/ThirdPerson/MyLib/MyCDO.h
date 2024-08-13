@@ -30,3 +30,12 @@ template<class T> struct MY_CDO_FINDER_Helper< TObjectPtr<T> >
 	}                                                   \
 	while (false)
 //----
+
+struct MyCDO
+{
+	template<class COMP>
+	static void CreateComponent(AActor* Actor, TObjectPtr<COMP>& OutComp)
+	{
+		OutComp = Actor->CreateDefaultSubobject<COMP>(COMP::StaticClass()->GetFName());
+	}
+};

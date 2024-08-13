@@ -39,7 +39,7 @@ class UMyUltraHandComponent : public UMyAbilityComponent
 	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	float		FuseTargetDampingFactor;
 
-	UPROPERTY(Category = Input, EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<class UMaterialInterface> MI_SelectionOverlay;
 
 public:
@@ -95,6 +95,7 @@ private:
 		TWeakObjectPtr<AActor>	SourceActor;
 		TWeakObjectPtr<AActor>	DestActor;
 
+		FVector		Location;
 		float		Distance;
 		FVector		SourcePoint;
 		FVector		ImpactPoint;
@@ -113,12 +114,7 @@ private:
 
 	void SetFuseTargetMode();
 
-	float FuseTargetTimeRemain = 0;
-
 	void TickFuseTarget(float DeltaTime);
 	bool DoTickFuseTarget(float DeltaTime);
-
-	void SetActorOrGroupState	(AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial);
-	void SetActorState			(AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial);
 };
 

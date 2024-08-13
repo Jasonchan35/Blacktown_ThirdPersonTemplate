@@ -30,17 +30,15 @@ bool MyFuseHelper::MatchGroup(AActor* Actor, UMyFusedGroup* Group)
 
 	for (auto& Member : Group->GetMembers())
 	{
-		if (Member)
-		{
-			if (Member->GetOwner() == Actor)
-				return true;
-		}
+		if (Member == Actor)
+			return true;
 	}
 
 	return false;
 }
 
-void MyFuseHelper::FuseActors(AActor* Actor1, AActor* Actor2, const FVector& Point)
+void MyFuseHelper::FuseActors(	AActor* Actor1, const FVector& RefPoint1,
+								AActor* Actor2, const FVector& RefPoint2)
 {
 	if (!Actor1 || !Actor2)
 		return;
@@ -62,7 +60,7 @@ void MyFuseHelper::FuseActors(AActor* Actor1, AActor* Actor2, const FVector& Poi
 		else if (Group2)
 			Group = Group2;
 		else
-			Group = NewObject<UMyFusedGroup>();	
+			Group = NewObject<UMyFusedGroup>();
 	}
 
 	Group->Members.Remove(nullptr);
@@ -83,7 +81,7 @@ void MyFuseHelper::FuseActors(AActor* Actor1, AActor* Actor2, const FVector& Poi
 	Constraint->OnConstraintBroken.AddDynamic(NewFuse1, &UMyFusedComponent::OnConstraintBroken);
 	Constraint->OnConstraintBroken.AddDynamic(NewFuse2, &UMyFusedComponent::OnConstraintBroken);
 
-	Constraint->SetWorldLocation(Point);
+	Constraint->SetWorldLocation(RefPoint1);
 
 	Constraint->SetLinearXLimit(ELinearConstraintMotion::LCM_Locked, 0);
 	Constraint->SetLinearYLimit(ELinearConstraintMotion::LCM_Locked, 0);
@@ -96,10 +94,18 @@ void MyFuseHelper::FuseActors(AActor* Actor1, AActor* Actor2, const FVector& Poi
 
 	Constraint->SetConstrainedComponents(Prim1, NAME_None, Prim2, NAME_None);
 
+	auto ReletiveRefPoint1 = Actor1->GetActorTransform().InverseTransformPosition(RefPoint1);
+	auto ReletiveRefPoint2 = Actor2->GetActorTransform().InverseTransformPosition(RefPoint2);
+
+	Constraint->SetConstraintReferencePosition(EConstraintFrame::Frame1, ReletiveRefPoint1);
+	Constraint->SetConstraintReferencePosition(EConstraintFrame::Frame2, ReletiveRefPoint2);
+
+	Constraint->UpdateConstraintFrames();
+
 	if (!Group->GlueMeshClass)
 		return;
 
-	auto* GlueMesh = Actor1->GetWorld()->SpawnActor(Group->GlueMeshClass.Get(), &Point);
+	auto* GlueMesh = Actor1->GetWorld()->SpawnActor(Group->GlueMeshClass.Get(), &RefPoint1);
 	if (!GlueMesh)
 		return;
 
@@ -109,9 +115,86 @@ void MyFuseHelper::FuseActors(AActor* Actor1, AActor* Actor2, const FVector& Poi
 	{
 		GluePrim->SetEnableGravity(false);
 		GluePrim->SetSimulatePhysics(false);
+		GluePrim->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 
 	NewFuse1->GlueMesh = GlueMesh;
+}
+
+void MyFuseHelper::SetActorState(AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial)
+{
+	auto SetToActor = [](AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial)
+	{
+		if (!Actor)
+			return;
+
+		auto* Prim = Actor->FindComponentByClass<UPrimitiveComponent>();
+		if (!Prim)
+			return;
+
+		Prim->SetSimulatePhysics(SimulatePhysics);
+		Prim->SetPhysicsLinearVelocity(FVector::ZeroVector);
+		Prim->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+
+		MyActorUtil::SetOverlayMaterial(Actor, OverlayMaterial);
+	};
+
+	if (!Actor)
+		return;
+
+	auto* Group = MyFuseHelper::FindGroup(Actor);
+	if (!Group)
+	{
+		SetToActor(Actor, SimulatePhysics, OverlayMaterial);
+		return;
+	}
+
+	for (auto* Member : Group->GetMembers())
+	{
+		if (Member)
+			SetToActor(Member, SimulatePhysics, OverlayMaterial);
+	}
+}
+
+void MyFuseHelper::SetActorTransform(AActor* Actor, const FTransform& NewTran)
+{
+	auto SetToActor = [](AActor* Actor, const FTransform& NewTran)
+	{
+		if (!Actor)
+			return;
+
+		Actor->SetActorTransform(NewTran, false, nullptr, ETeleportType::TeleportPhysics);
+		if (auto* PrimComp = Actor->FindComponentByClass<UPrimitiveComponent>())
+		{
+			PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
+			PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+		}
+	};
+
+	if (!Actor)
+		return;
+
+	auto& ActorTran = Actor->GetActorTransform();
+	auto InvActorTran = ActorTran.Inverse();
+	auto ReletiveTran = InvActorTran * NewTran;
+
+	SetToActor(Actor, NewTran);
+
+	auto* Group = MyFuseHelper::FindGroup(Actor);
+	if (!Group)
+		return;
+
+	for (auto* Member : Group->GetMembers())
+	{
+		if (!Member)
+			continue;
+
+		if (Member == Actor)
+			continue;
+
+		auto& MemberTran = Member->GetActorTransform();
+		SetToActor(Member, MemberTran * ReletiveTran);
+	}
 }
 
 UMyFusedGroup::UMyFusedGroup()
@@ -124,9 +207,9 @@ bool UMyFusedGroup::HasMember(AActor* Actor)
 	if (!Actor)
 		return false;
 
-	for (auto& Comp : Members)
+	for (auto& Member : Members)
 	{
-		if (Comp && Comp->GetOwner() == Actor)
+		if (Member == Actor)
 			return true;
 	}
 
@@ -150,7 +233,7 @@ void MyFuseHelper::AddMember(UMyFusedGroup* Group, UMyFusedComponent* Comp)
 		RemoveMember(Comp->FusedGroup, Comp);
 
 	Comp->FusedGroup = Group;
-	Group->Members.Add(Comp);
+	Group->Members.AddUnique(Comp->GetOwner());
 }
 
 void MyFuseHelper::RemoveMember(UMyFusedGroup* Group, UMyFusedComponent* Comp)
@@ -162,7 +245,7 @@ void MyFuseHelper::RemoveMember(UMyFusedGroup* Group, UMyFusedComponent* Comp)
 		return;
 
 	Comp->FusedGroup = nullptr;
-	Group->Members.Remove(Comp);
+	Group->Members.Remove(Comp->GetOwner());
 }
 
 void UMyFusedComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
