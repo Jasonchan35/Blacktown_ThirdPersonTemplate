@@ -123,7 +123,7 @@ void MyFuseHelper::FuseActors(	AActor* Actor1, const FVector& RefPoint1,
 
 void MyFuseHelper::SetActorState(AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial)
 {
-	auto SetToActor = [](AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial)
+	auto SetToActor = [](AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial) -> void
 	{
 		if (!Actor)
 			return;
@@ -142,23 +142,21 @@ void MyFuseHelper::SetActorState(AActor* Actor, bool SimulatePhysics, UMaterialI
 	if (!Actor)
 		return;
 
-	auto* Group = MyFuseHelper::FindGroup(Actor);
-	if (!Group)
-	{
-		SetToActor(Actor, SimulatePhysics, OverlayMaterial);
-		return;
-	}
+	SetToActor(Actor, SimulatePhysics, OverlayMaterial);
 
-	for (auto* Member : Group->GetMembers())
+	if (auto* Group = MyFuseHelper::FindGroup(Actor))
 	{
-		if (Member)
-			SetToActor(Member, SimulatePhysics, OverlayMaterial);
+		for (auto* Member : Group->GetMembers())
+		{
+			if (Member && Member != Actor)
+				SetToActor(Member, SimulatePhysics, OverlayMaterial);
+		}
 	}
 }
 
 void MyFuseHelper::SetActorTransform(AActor* Actor, const FTransform& NewTran)
 {
-	auto SetToActor = [](AActor* Actor, const FTransform& NewTran)
+	auto SetToActor = [](AActor* Actor, const FTransform& NewTran) -> void
 	{
 		if (!Actor)
 			return;
@@ -180,20 +178,13 @@ void MyFuseHelper::SetActorTransform(AActor* Actor, const FTransform& NewTran)
 
 	SetToActor(Actor, NewTran);
 
-	auto* Group = MyFuseHelper::FindGroup(Actor);
-	if (!Group)
-		return;
-
-	for (auto* Member : Group->GetMembers())
+	if (auto* Group = MyFuseHelper::FindGroup(Actor))
 	{
-		if (!Member)
-			continue;
-
-		if (Member == Actor)
-			continue;
-
-		auto& MemberTran = Member->GetActorTransform();
-		SetToActor(Member, MemberTran * ReletiveTran);
+		for (auto* Member : Group->GetMembers())
+		{
+			if (Member && Member != Actor)
+				SetToActor(Member, Member->GetActorTransform() * ReletiveTran);
+		}
 	}
 }
 

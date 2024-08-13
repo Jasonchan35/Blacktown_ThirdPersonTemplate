@@ -104,7 +104,7 @@ void UMyUltraHandComponent::IA_DPad_Triggered(const FVector2D& Value)
 {
 	switch (Mode)
 	{
-		case EMyUltraHandMode::HoldTarget: AddHoldTargetRelativeLocation(Value); break;
+		case EMyUltraHandMode::HoldTarget: MoveTargetForward(Value.Y); break;
 	}
 }
 
@@ -139,7 +139,7 @@ bool UMyUltraHandComponent::DoTickSearchTarget(float DeltaTime)
 	if (!SearchTargetAsyncTraceDelegate.IsBound())
 		SearchTargetAsyncTraceDelegate.BindUObject(this, &ThisClass::SearchTargetAsyncTraceResult);
 
-	QueryParams.ClearIgnoredActors();
+	FCollisionQueryParams	QueryParams;
 	QueryParams.AddIgnoredActor(Ch);
 
 	FCollisionObjectQueryParams ObjectQueryParams;
@@ -201,7 +201,7 @@ void UMyUltraHandComponent::TickHoldTarget(float DeltaTime)
 
 bool UMyUltraHandComponent::DoTickHoldTarget(float DeltaTime)
 {
-	if (!UpdateTargetActorLocation(DeltaTime))
+	if (!HoldTargetUpdateLocation(DeltaTime))
 		return false;
 
 	if (!DoSearchFusable())
@@ -242,7 +242,7 @@ bool UMyUltraHandComponent::DoTickFuseTarget(float DeltaTime)
 	return true;
 }
 
-bool UMyUltraHandComponent::UpdateTargetActorLocation(float DeltaTime)
+bool UMyUltraHandComponent::HoldTargetUpdateLocation(float DeltaTime)
 {
 	auto* Target = TargetActor.Get();
 	if (!Target) // Lost Target
@@ -281,19 +281,111 @@ bool UMyUltraHandComponent::UpdateTargetActorLocation(float DeltaTime)
 	DrawDebugLine(GetWorld(), ChLoc, GoalLoc, FColor::Green, false, 0, 0, 0);
 
 	FVector NewLoc  = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, HoldTargetDampingFactor);
-//	FQuat   NewQuat = ControlRot.Quaternion() * HoldTargetQuat;
+	FQuat   NewQuat = ControlRot.Quaternion() * HoldTargetQuat;
 
-	auto NewTran = Target->GetActorTransform();
-	NewTran.SetLocation(NewLoc);
+	FVector MoveVector = NewLoc - TargetLoc;
+	FVector MoveDir    = MoveVector.GetSafeNormal();
+	float   MoveDistance = MoveVector.Length();
 
-	MyFuseHelper::SetActorTransform(Target, NewTran);
+	FCollisionQueryParams	QueryParams;
+	QueryParams.AddIgnoredActor(Target);
+
+	auto* Group = MyFuseHelper::FindGroup(Target);
+	if (Group)
+	{
+		for (auto& Member : Group->GetMembers())
+		{
+			if (Member && Member != Target)
+				QueryParams.AddIgnoredActor(Member);
+		}
+	}
+
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+
+	auto* World = GetWorld();
+
+	HoldTargetAsyncTraceCount = 0;
+	HoldTargetAsyncTraceMinDistance	= MoveDistance;
+	HoldTargetAsyncTraceDirection	= MoveDir;
+	HoldTargetAsyncTraceQuat		= NewQuat;
+
+	if (!HoldTargetAsyncTraceDelegate.IsBound())
+		HoldTargetAsyncTraceDelegate.BindUObject(this, &ThisClass::HoldTargetAsyncTraceResult);
+
+	auto AsyncSweep = [&](AActor* Actor, const FTransform& Tran) -> void
+	{
+		auto* Prim = Actor->FindComponentByClass<UPrimitiveComponent>();
+		if (!Prim)
+			return;
+
+		World->AsyncSweepByObjectType(	EAsyncTraceType::Single,
+										Tran.GetLocation() + MoveDir * 10,
+										Tran.GetLocation() + MoveDir * (MoveDistance + 10),
+										Tran.GetRotation(),
+										ObjectQueryParams,
+										Prim->GetCollisionShape(),
+										QueryParams,
+										&HoldTargetAsyncTraceDelegate,
+										HoldTargetAsyncTraceCount);
+
+		HoldTargetAsyncTraceCount++;
+	};
+
+	auto& TargetTran = Target->GetActorTransform();
+	auto NewTran = TargetTran;
+	NewTran.SetLocation(TargetLoc + MoveDir * MoveDistance);
+
+	auto InvTargetTran = TargetTran.Inverse();
+	auto ReletiveTran = InvTargetTran * NewTran;
+
+	AsyncSweep(Target, NewTran);
+
+	if (Group)
+	{
+		for (auto& Member : Group->GetMembers())
+		{
+			if (Member && Member != Target)
+				AsyncSweep(Member, Member->GetActorTransform() * ReletiveTran);
+		}
+	}
+
 	return true;
 }
 
-void UMyUltraHandComponent::AddHoldTargetRelativeLocation(const FVector2D& Value)
+void UMyUltraHandComponent::HoldTargetAsyncTraceResult(const FTraceHandle& TraceHandle, FTraceDatum& Data)
+{
+	auto Index = Data.UserData;
+	auto& MinDistance = HoldTargetAsyncTraceMinDistance;
+
+	for (auto& Hit : Data.OutHits)
+	{
+		MinDistance = FMath::Min(Hit.Distance, MinDistance);
+	}
+
+	if (Index == HoldTargetAsyncTraceCount - 1)
+	{
+		// The last one
+		auto* Target = TargetActor.Get();
+		if (!Target)
+			return;
+
+		if (FMath::IsNearlyZero(MinDistance))
+			return;
+
+		auto NewTran = Target->GetActorTransform();
+		NewTran.SetLocation(NewTran.GetLocation() + HoldTargetAsyncTraceDirection * MinDistance);
+		NewTran.SetRotation(HoldTargetAsyncTraceQuat);
+
+		MyFuseHelper::SetActorTransform(Target, NewTran);
+	}
+}
+
+void UMyUltraHandComponent::MoveTargetForward(float V)
 {
 	auto& X = HoldTargetVector.X;
-	X = FMath::Clamp(X + Value.Y * 10, HoldTargetDistanceMin, HoldTargetDistanceMax);
+	X = FMath::Clamp(X + V * 10, HoldTargetDistanceMin, HoldTargetDistanceMax);
 }
 
 bool UMyUltraHandComponent::DoSearchFusable()
@@ -307,20 +399,17 @@ bool UMyUltraHandComponent::DoSearchFusable()
 	if (!Target)
 		return false;
 
-	QueryParams.ClearIgnoredActors();
+	FCollisionQueryParams	QueryParams;
 	QueryParams.AddIgnoredActor(GetOwner());
+	QueryParams.AddIgnoredActor(Target);
 
 	if (auto* Group = MyFuseHelper::FindGroup(Target))
 	{
 		for(auto& Member : Group->GetMembers())
 		{
-			if (Member)
+			if (Member && Member != Target)
 				QueryParams.AddIgnoredActor(Member);
 		}
-	}
-	else
-	{
-		QueryParams.AddIgnoredActor(Target);
 	}
 
 	FCollisionObjectQueryParams ObjectQueryParams;

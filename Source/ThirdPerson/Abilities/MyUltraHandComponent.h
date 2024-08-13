@@ -78,9 +78,17 @@ private:
 
 	void TickHoldTarget(float DeltaTime);
 	bool DoTickHoldTarget(float DeltaTime);
-	bool UpdateTargetActorLocation(float DeltaTime);
+	bool HoldTargetUpdateLocation(float DeltaTime);
 
-	void AddHoldTargetRelativeLocation(const FVector2D& Value);
+	FTraceDelegate HoldTargetAsyncTraceDelegate;
+	void HoldTargetAsyncTraceResult(const FTraceHandle& TraceHandle, FTraceDatum& Data);
+
+	int		HoldTargetAsyncTraceCount = 0;
+	float	HoldTargetAsyncTraceMinDistance = 0;
+	FVector	HoldTargetAsyncTraceDirection;
+	FQuat	HoldTargetAsyncTraceQuat;
+
+	void MoveTargetForward(float V);
 
 	FQuat	HoldTargetQuat;
 	FVector	HoldTargetVector;
@@ -104,8 +112,6 @@ private:
 	FFusable	Fusable;
 
 	bool DoSearchFusable();
-
-	FCollisionQueryParams	QueryParams;
 
 	TArray<FOverlapResult>	SearchFusableTempOverlaps;
 	FFusable				SearchFusableAsyncSweep;
