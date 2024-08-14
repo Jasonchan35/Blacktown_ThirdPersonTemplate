@@ -51,6 +51,9 @@ public:
 	AActor* GetTargetActor() { return TargetActor.Get(); }
 
 	bool	OnLookPitchInputAdded(float Pitch);
+	EMyUltraHandMode GetMode() const { return Mode; }
+
+	bool	HasFusable() const { return bool(Fusable); }
 
 protected:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction) override;

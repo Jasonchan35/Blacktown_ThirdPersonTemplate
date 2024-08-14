@@ -6,6 +6,7 @@
 #include "MyUIWidgetBase.generated.h"
 
 class AMyPlayerController;
+class AMyCharacter;
 
 UCLASS(Abstract)
 class UMyUIWidgetBase : public UUserWidget
@@ -16,6 +17,7 @@ public:
 	void SafeRemoveFromParent();
 
 	AMyPlayerController*	GetMyPlayerController();
+	AMyCharacter*			GetMyCharacter();
 
 private:
 	// Disable Super functions

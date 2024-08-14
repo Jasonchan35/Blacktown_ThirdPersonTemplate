@@ -17,3 +17,9 @@ AMyPlayerController* UMyUIWidgetBase::GetMyPlayerController()
 {
 	return GetOwningPlayer<AMyPlayerController>();
 }
+
+AMyCharacter* UMyUIWidgetBase::GetMyCharacter()
+{
+	auto* PC = GetMyPlayerController();
+	return PC ? PC->GetMyCharacter() : nullptr;
+}

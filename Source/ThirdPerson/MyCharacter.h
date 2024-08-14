@@ -42,6 +42,7 @@ public:
 	AMyCharacter();
 	void		SetCurrentAbility(EMyAbility Ability);
 	EMyAbility	GetCurrentAbility() const { return CurrentAbility; }
+	UMyAbilityComponent* GetCurrentAbilityComponent() { return CurrentAbilityComponent.Get(); }
 
 	AMyPlayerController* GetPlayerController();
 
