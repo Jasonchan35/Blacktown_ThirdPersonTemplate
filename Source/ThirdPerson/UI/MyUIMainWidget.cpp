@@ -67,7 +67,7 @@ void UMyUIMainWidget::TickUltraHandMode(UMyUltraHandComponent* UltraHand)
 		}
 		break;
 
-		case EMyUltraHandMode::HoldTarget:
+		case EMyUltraHandMode::GrabTarget:
 		{
 			bShow_Cancel_Widget = true;
 			bShow_ForwardBack_Widget = true;

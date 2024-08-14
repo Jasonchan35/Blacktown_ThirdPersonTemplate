@@ -11,23 +11,24 @@ UMyUltraHandComponent::UMyUltraHandComponent()
 	SearchTargetRadius  = 800;
 	MaxFusableDistance  = 100;
 
-	HoldTargetDistanceMin = 50;
-	HoldTargetDistanceMax = 700;
+	GrabTargetDistanceMin = 50;
+	GrabTargetDistanceMax = 700;
 
-	HoldTargetHeightMax   =  850;
+	GrabTargetHeightMax   =  850;
 
-	HoldTargetDampingFactor = 8;
+	GrabTargetDampingFactor = 8;
 	FuseTargetDampingFactor = 3;
 
-	MY_CDO_FINDER(MI_SelectionOverlay, TEXT("/Game/ThirdPerson/Materials/M_SelectionOverlay"));
+	MY_CDO_FINDER(MI_GrabbableOverlay, TEXT("/Game/ThirdPerson/Materials/MI_GrabbableOverlay"));
+	MY_CDO_FINDER(MI_FusableOverlay,   TEXT("/Game/ThirdPerson/Materials/MI_FusableOverlay"));
 }
 
 void UMyUltraHandComponent::IA_Confirm_Started()
 {
 	switch (Mode)
 	{
-		case EMyUltraHandMode::SearchTarget:	SetHoldTargetMode(); break;
-		case EMyUltraHandMode::HoldTarget:		SetFuseTargetMode(); break;
+		case EMyUltraHandMode::SearchTarget:	SetGrabTargetMode(); break;
+		case EMyUltraHandMode::GrabTarget:		SetFuseTargetMode(); break;
 	}
 }
 
@@ -36,13 +37,13 @@ void UMyUltraHandComponent::IA_Cancel_Started()
 	switch (Mode)
 	{
 //		case EMyUltraHandMode::SearchTarget:	SetAbilityActive(false); break;
-		case EMyUltraHandMode::HoldTarget:		SetSearchTargetMode(); break;
+		case EMyUltraHandMode::GrabTarget:		SetSearchTargetMode(); break;
 	}
 }
 
 void UMyUltraHandComponent::IA_Break_Started()
 {
-	if (Mode != EMyUltraHandMode::HoldTarget)
+	if (Mode != EMyUltraHandMode::GrabTarget)
 		return;
 
 	MyFuseHelper::BreakFusedActor(TargetActor.Get());
@@ -55,13 +56,16 @@ void UMyUltraHandComponent::SetTargetActor(AActor* Actor)
 		return;
 
 	if (Cur)
+	{
+		ResetSearchFusableTempOverlaps();
 		MyFuseHelper::SetActorState(Cur, true, nullptr);
+	}
 
 	TargetActor = Actor;
 	Fusable.Reset();
 
 	if (Actor)
-		MyFuseHelper::SetActorState(Actor, true, MI_SelectionOverlay);
+		MyFuseHelper::SetActorState(Actor, true, MI_GrabbableOverlay);
 }
 
 void UMyUltraHandComponent::SetAbilityActive(bool Active)
@@ -85,25 +89,10 @@ void UMyUltraHandComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-#if 1 // Debug
-	MY_LOG_ON_SCREEN(L"UltraHand Mode='{}'", Mode);
-
-	if (TargetActor.Get())
-	{
-		if (auto* Ch = GetMyCharacter())
-		{
-			DrawDebugLine(GetWorld(),
-				Ch->GetActorLocation(),
-				TargetActor->GetActorLocation(),
-				FColor::Green);
-		}
-	}
-#endif
-
 	switch (Mode)
 	{
 		case EMyUltraHandMode::SearchTarget:	TickSearchTarget(DeltaTime);	break;
-		case EMyUltraHandMode::HoldTarget:		TickHoldTarget(DeltaTime);		break;
+		case EMyUltraHandMode::GrabTarget:		TickGrabTarget(DeltaTime);		break;
 		case EMyUltraHandMode::FuseTarget:		TickFuseTarget(DeltaTime);		break;
 	}
 }
@@ -112,7 +101,7 @@ void UMyUltraHandComponent::IA_DPad_Triggered(const FVector2D& Value)
 {
 	switch (Mode)
 	{
-		case EMyUltraHandMode::HoldTarget: MoveTargetForward(Value.Y); break;
+		case EMyUltraHandMode::GrabTarget: MoveTargetForward(Value.Y); break;
 	}
 }
 
@@ -172,9 +161,9 @@ void UMyUltraHandComponent::SearchTargetAsyncTraceResult(const FTraceHandle& Tra
 	SetTargetActor(Cast<AActor>(Actor));
 }
 
-void UMyUltraHandComponent::SetHoldTargetMode()
+void UMyUltraHandComponent::SetGrabTargetMode()
 {
-	Mode = EMyUltraHandMode::HoldTarget;
+	Mode = EMyUltraHandMode::GrabTarget;
 	Fusable.Reset();
 
 	auto* Target = TargetActor.Get();
@@ -187,27 +176,27 @@ void UMyUltraHandComponent::SetHoldTargetMode()
 		return;
 	}
 
-	MyFuseHelper::SetActorState(Target, false, MI_SelectionOverlay);
+	MyFuseHelper::SetActorState(Target, false, MI_GrabbableOverlay);
 
 	auto Rot = PC->GetControlRotation();
 
 	auto Yaw  = Rot.Yaw;
 	auto InvQuat = FRotator(0, Yaw, 0).Quaternion().Inverse();
-	HoldTargetQuat	= InvQuat * Target->GetActorQuat();
+	GrabTargetQuat	= InvQuat * Target->GetActorQuat();
 
 	auto TargetLoc	= Target->GetActorLocation();
 	auto ChLoc		= Ch->GetActorLocation();
 
-	HoldTargetVector = InvQuat * (TargetLoc - ChLoc);
+	GrabTargetVector = InvQuat * (TargetLoc - ChLoc);
 }
 
-void UMyUltraHandComponent::TickHoldTarget(float DeltaTime)
+void UMyUltraHandComponent::TickGrabTarget(float DeltaTime)
 {
-	if (!DoTickHoldTarget(DeltaTime))
+	if (!DoTickGrabTarget(DeltaTime))
 		SetSearchTargetMode();
 }
 
-bool UMyUltraHandComponent::DoTickHoldTarget(float DeltaTime)
+bool UMyUltraHandComponent::DoTickGrabTarget(float DeltaTime)
 {
 	if (!MoveTargetLocation(DeltaTime))
 		return false;
@@ -269,27 +258,27 @@ bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 	auto DeltaZ = TargetLoc.Z - ChLoc.Z;
 	auto DistXY = FVector::DistXY(TargetLoc, ChLoc);
 
-	if (DistXY < HoldTargetDistanceMin - 10) return false;
-	if (DistXY > HoldTargetDistanceMax + 10) return false;
-	if (DeltaZ < -HoldTargetHeightMax  - 10) return false;
-	if (DeltaZ >  HoldTargetHeightMax  + 10) return false;
+	if (DistXY < GrabTargetDistanceMin - 10) return false;
+	if (DistXY > GrabTargetDistanceMax + 10) return false;
+	if (DeltaZ < -GrabTargetHeightMax  - 10) return false;
+	if (DeltaZ >  GrabTargetHeightMax  + 10) return false;
 
 	auto ControlRot = PC->GetControlRotation();
 	ControlRot.Pitch = FMath::ClampAngle(ControlRot.Pitch, -80, 80);
 
-	auto Vector = HoldTargetVector;
+	auto Vector = GrabTargetVector;
 
-	Vector.Z = FMath::Tan(FMath::DegreesToRadians(ControlRot.Pitch)) * HoldTargetVector.X;
+	Vector.Z = FMath::Tan(FMath::DegreesToRadians(ControlRot.Pitch)) * GrabTargetVector.X;
 
-	Vector.X = FMath::Clamp(Vector.X, HoldTargetDistanceMin, HoldTargetDistanceMax);
-	Vector.Z = FMath::Clamp(Vector.Z, -HoldTargetHeightMax, HoldTargetHeightMax);
+	Vector.X = FMath::Clamp(Vector.X, GrabTargetDistanceMin, GrabTargetDistanceMax);
+	Vector.Z = FMath::Clamp(Vector.Z, -GrabTargetHeightMax, GrabTargetHeightMax);
 	Vector.Z += 60; // add some extra Z to life object above the ground
 
 	auto GoalLoc   = ChLoc + FRotator(0, ControlRot.Yaw, 0).RotateVector(Vector);
 
 	DrawDebugLine(GetWorld(), ChLoc, GoalLoc, FColor::Green, false, 0, 0, 0);
 
-	FVector NewLoc  = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, HoldTargetDampingFactor);
+	FVector NewLoc  = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, GrabTargetDampingFactor);
 	FVector MoveVector = NewLoc - TargetLoc;
 
 	auto& AsyncData = MoveTargetAsyncData;
@@ -297,7 +286,7 @@ bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 	AsyncData.Count			= 0;
 	AsyncData.MinDistance	= MoveVector.Length();
 	AsyncData.Direction		= MoveVector.GetSafeNormal();
-	AsyncData.Quat			= ControlRot.Quaternion() * HoldTargetQuat;
+	AsyncData.Quat			= FRotator(0, ControlRot.Yaw, 0).Quaternion() * GrabTargetQuat;
 
 	FCollisionQueryParams	QueryParams;
 	QueryParams.AddIgnoredActor(Target);
@@ -328,9 +317,9 @@ bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 			return;
 
 		World->AsyncSweepByObjectType(	EAsyncTraceType::Single,
-										Tran.GetLocation() + AsyncData.Direction * 10,
-										Tran.GetLocation() + AsyncData.Direction * (AsyncData.MinDistance + 10),
-										Tran.GetRotation(),
+										Tran.GetLocation(),
+										Tran.GetLocation() + AsyncData.Direction * (AsyncData.MinDistance + 100),
+										Tran.GetRotation() * AsyncData.Quat,
 										ObjectQueryParams,
 										Prim->GetCollisionShape(),
 										QueryParams,
@@ -376,7 +365,7 @@ void UMyUltraHandComponent::MoveTargetAsyncResult(const FTraceHandle& TraceHandl
 	if (AsyncData.Count != 0)
 		return;
 
-	if (Mode != EMyUltraHandMode::HoldTarget)
+	if (Mode != EMyUltraHandMode::GrabTarget)
 		return;
 
 	auto* Target = TargetActor.Get();
@@ -395,8 +384,8 @@ void UMyUltraHandComponent::MoveTargetAsyncResult(const FTraceHandle& TraceHandl
 
 void UMyUltraHandComponent::MoveTargetForward(float V)
 {
-	auto& X = HoldTargetVector.X;
-	X = FMath::Clamp(X + V * 10, HoldTargetDistanceMin, HoldTargetDistanceMax);
+	auto& X = GrabTargetVector.X;
+	X = FMath::Clamp(X + V * 10, GrabTargetDistanceMin, GrabTargetDistanceMax);
 }
 
 bool UMyUltraHandComponent::DoSearchFusable()
@@ -432,7 +421,7 @@ bool UMyUltraHandComponent::DoSearchFusable()
 
 //---- check overlapped actor within radius
 	{
-		SearchFusableTempOverlaps.Reset();
+		ResetSearchFusableTempOverlaps();
 		bool overlapped = GetWorld()->OverlapMultiByObjectType(
 											SearchFusableTempOverlaps,
 											Target->GetActorLocation(),
@@ -455,9 +444,10 @@ bool UMyUltraHandComponent::DoSearchFusable()
 		{
 			auto& Overlap = SearchFusableTempOverlaps[i];
 			auto* SourceActor = Overlap.GetActor();
-
 			if (!SourceActor)
 				continue;
+
+			MyActorUtil::SetOverlayMaterial(SourceActor, MI_FusableOverlay);
 
 			auto* Prim = SourceActor->FindComponentByClass<UPrimitiveComponent>();
 			if (!Prim)
@@ -484,6 +474,13 @@ bool UMyUltraHandComponent::DoSearchFusable()
 		}
 	}
 	return true;
+}
+
+void UMyUltraHandComponent::ResetSearchFusableTempOverlaps()
+{
+	for (auto& OverlapResult : SearchFusableTempOverlaps)
+		MyActorUtil::SetOverlayMaterial(OverlapResult.GetActor(), nullptr);
+	SearchFusableTempOverlaps.Reset();
 }
 
 void UMyUltraHandComponent::SearchFusableAsyncResult(const FTraceHandle& TraceHandle, FTraceDatum& Data)

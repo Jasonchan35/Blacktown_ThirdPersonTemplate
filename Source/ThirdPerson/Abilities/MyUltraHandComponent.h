@@ -9,7 +9,7 @@ enum class EMyUltraHandMode
 {
 	None,
 	SearchTarget,
-	HoldTarget,
+	GrabTarget,
 	FuseTarget,
 };
 
@@ -25,22 +25,25 @@ class UMyUltraHandComponent : public UMyAbilityComponent
 	float		MaxFusableDistance;
 
 	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	float		HoldTargetDampingFactor;
+	float		GrabTargetDampingFactor;
 
 	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	float		HoldTargetDistanceMin;
+	float		GrabTargetDistanceMin;
 
 	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	float		HoldTargetDistanceMax;
+	float		GrabTargetDistanceMax;
 
 	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	float		HoldTargetHeightMax;
+	float		GrabTargetHeightMax;
 
 	UPROPERTY(EditAnywhere, Transient, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	float		FuseTargetDampingFactor;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<class UMaterialInterface> MI_SelectionOverlay;
+	TObjectPtr<class UMaterialInterface> MI_GrabbableOverlay;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<class UMaterialInterface> MI_FusableOverlay;
 
 public:
 	UMyUltraHandComponent();
@@ -78,10 +81,10 @@ private:
 	void SearchTargetAsyncTraceResult(const FTraceHandle& TraceHandle, FTraceDatum& Data);
 
 // Hold Target Mode
-	void SetHoldTargetMode();
+	void SetGrabTargetMode();
 
-	void TickHoldTarget(float DeltaTime);
-	bool DoTickHoldTarget(float DeltaTime);
+	void TickGrabTarget(float DeltaTime);
+	bool DoTickGrabTarget(float DeltaTime);
 	bool MoveTargetLocation(float DeltaTime);
 
 	FTraceDelegate MoveTargetAsyncDelegate;
@@ -98,8 +101,8 @@ private:
 
 	void MoveTargetForward(float V);
 
-	FQuat	HoldTargetQuat;
-	FVector	HoldTargetVector;
+	FQuat	GrabTargetQuat;
+	FVector	GrabTargetVector;
 
 	struct FFusable
 	{
@@ -120,6 +123,7 @@ private:
 	FFusable	Fusable;
 
 	bool DoSearchFusable();
+	void ResetSearchFusableTempOverlaps();
 
 	TArray<FOverlapResult>	SearchFusableTempOverlaps;
 	FFusable				SearchFusableAsyncData;
