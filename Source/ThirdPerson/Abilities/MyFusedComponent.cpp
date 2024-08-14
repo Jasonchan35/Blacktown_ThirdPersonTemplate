@@ -12,31 +12,6 @@ UMyFusedGroup* MyFuseHelper::FindGroup(AActor* Actor)
 	return Fuse->GetFusedGroup();
 }
 
-bool MyFuseHelper::MatchActorOrGroup(AActor* Actor, AActor* ActorOrGroup)
-{
-	if (!Actor || !ActorOrGroup)
-		return false;
-
-	if (Actor == ActorOrGroup)
-		return true;
-
-	return MatchGroup(Actor, FindGroup(ActorOrGroup));
-}
-
-bool MyFuseHelper::MatchGroup(AActor* Actor, UMyFusedGroup* Group)
-{
-	if (!Group)
-		return false;
-
-	for (auto& Member : Group->GetMembers())
-	{
-		if (Member && Member->GetOwner() == Actor)
-			return true;
-	}
-
-	return false;
-}
-
 void MyFuseHelper::FuseActors(	AActor* Actor1, const FVector& RefPoint1,
 								AActor* Actor2, const FVector& RefPoint2)
 {
@@ -118,8 +93,7 @@ void MyFuseHelper::SetActorState(AActor* Actor, bool SimulatePhysics, UMaterialI
 			return;
 
 		Prim->SetSimulatePhysics(SimulatePhysics);
-		Prim->SetPhysicsLinearVelocity(FVector::ZeroVector);
-		Prim->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+		Prim->SetEnableGravity(SimulatePhysics);
 
 		MyActorUtil::SetOverlayMaterial(Actor, OverlayMaterial);
 	};

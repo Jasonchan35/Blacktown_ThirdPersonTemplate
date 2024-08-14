@@ -10,7 +10,6 @@ enum class EMyUltraHandMode
 	None,
 	SearchTarget,
 	GrabTarget,
-	FuseTarget,
 };
 
 UCLASS()
@@ -130,9 +129,6 @@ private:
 	FTraceDelegate			SearchFusableAsyncDelegate;
 	void SearchFusableAsyncResult(const FTraceHandle& TraceHandle, FTraceDatum& Data);
 
-	void SetFuseTargetMode();
-
-	void TickFuseTarget(float DeltaTime);
-	bool DoTickFuseTarget(float DeltaTime);
+	bool AcceptFusableTarget();
 };
 

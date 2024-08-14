@@ -34,15 +34,16 @@ int MyPhysics::BodyInstanceAsyncSweepByObjectType(
 		auto TraceStart = Start + BoxLoc;
 		auto TraceEnd   = End   + BoxLoc;
 
-//		DrawDebugLine(World, TraceStart, TraceEnd, FColor::Magenta);
-//		DrawDebugBox(World, BoxLoc, BoxExtent, BoxRot, FColor::Yellow);
+		//DrawDebugLine(World, TraceStart, TraceEnd, FColor::Yellow);
+		//DrawDebugBox(World,  TraceStart, BoxExtent, BoxRot, FColor::Yellow);
 
 		World->AsyncSweepByObjectType(
 					InTraceType, 
 					TraceStart, TraceEnd, BoxRot,
 					ObjectQueryParams,
 					FCollisionShape::MakeBox(BoxExtent),
-					Params, InDelegate);
+					Params, 
+					InDelegate, UserData);
 		SweepCount++;
 	}
 
@@ -79,6 +80,7 @@ int MyPhysics::PrimitiveComponentAsyncSweepByObjectType(
 						Start, End, Rot,
 						ObjectQueryParams, 
 						Body,
-						Params, InDelegate);
+						Params, 
+						InDelegate, UserData);
 	return SweepCount;
 }
