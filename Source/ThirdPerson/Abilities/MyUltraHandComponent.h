@@ -95,7 +95,7 @@ private:
 		int		Count = 0;
 		float	MinDistance = 0;
 		FVector	Direction;
-		FQuat	Quat;
+		FQuat	RelativeQuat;
 	};
 	FMoveTargetAsyncData	MoveTargetAsyncData;
 

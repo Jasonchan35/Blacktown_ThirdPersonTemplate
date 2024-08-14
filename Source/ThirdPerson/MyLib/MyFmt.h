@@ -133,6 +133,15 @@ struct fmt::formatter<UE::Math::TVector4<E>, TCHAR> : public MyFmt_FormatterBase
 	}
 };
 
+template <>
+struct fmt::formatter<FVector_NetQuantize, TCHAR> : public MyFmt_FormatterBase
+{
+	auto format(const FVector_NetQuantize& v, MyFmt_Context& ctx)
+	{
+		return fmt::format_to(ctx.out(), TEXT("[X={}, Y={}, Z={}]"), v.X, v.Y, v.Z);
+	}
+};
+
 template <class E>
 struct fmt::formatter<UE::Math::TRotator<E>, TCHAR> : public MyFmt_FormatterBase
 {
@@ -141,4 +150,3 @@ struct fmt::formatter<UE::Math::TRotator<E>, TCHAR> : public MyFmt_FormatterBase
 		return fmt::format_to(ctx.out(), TEXT("Rot[Pitch={}, Yaw={}, Roll={}]"), v.Pitch, v.Yaw, v.Roll);
 	}
 };
-

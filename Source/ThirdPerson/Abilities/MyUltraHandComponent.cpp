@@ -239,7 +239,6 @@ bool UMyUltraHandComponent::DoTickFuseTarget(float DeltaTime)
 	return true;
 }
 
-
 bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 {
 	auto* Target = TargetActor.Get();
@@ -253,7 +252,8 @@ bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 		return false;
 
 	auto ChLoc = Ch->GetActorLocation();
-	auto TargetLoc = Target->GetActorLocation();
+	auto TargetLoc  = Target->GetActorLocation();
+	auto TargetQuat = Target->GetActorQuat();
 
 	auto DeltaZ = TargetLoc.Z - ChLoc.Z;
 	auto DistXY = FVector::DistXY(TargetLoc, ChLoc);
@@ -272,8 +272,9 @@ bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 
 	Vector.X = FMath::Clamp(Vector.X, GrabTargetDistanceMin, GrabTargetDistanceMax);
 	Vector.Z = FMath::Clamp(Vector.Z, -GrabTargetHeightMax, GrabTargetHeightMax);
-	Vector.Z += 60; // add some extra Z to life object above the ground
+	Vector.Z += 80; // add some extra Z to life object above the ground
 
+	auto GoalQuat  = FRotator(0, ControlRot.Yaw, 0).Quaternion() * GrabTargetQuat;
 	auto GoalLoc   = ChLoc + FRotator(0, ControlRot.Yaw, 0).RotateVector(Vector);
 
 	DrawDebugLine(GetWorld(), ChLoc, GoalLoc, FColor::Green, false, 0, 0, 0);
@@ -286,7 +287,7 @@ bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 	AsyncData.Count			= 0;
 	AsyncData.MinDistance	= MoveVector.Length();
 	AsyncData.Direction		= MoveVector.GetSafeNormal();
-	AsyncData.Quat			= FRotator(0, ControlRot.Yaw, 0).Quaternion() * GrabTargetQuat;
+	AsyncData.RelativeQuat	= TargetQuat.Inverse() * GoalQuat;
 
 	FCollisionQueryParams	QueryParams;
 	QueryParams.AddIgnoredActor(Target);
@@ -310,42 +311,40 @@ bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 	if (!MoveTargetAsyncDelegate.IsBound())
 		MoveTargetAsyncDelegate.BindUObject(this, &ThisClass::MoveTargetAsyncResult);
 
-	auto AsyncSweep = [&](AActor* Actor, const FTransform& Tran) -> void
+	auto AsyncSweep = [&](AActor* Actor) -> void
 	{
+		if (!Actor)
+			return;
+
 		auto* Prim = Actor->FindComponentByClass<UPrimitiveComponent>();
 		if (!Prim)
 			return;
 
-		World->AsyncSweepByObjectType(	EAsyncTraceType::Single,
-										Tran.GetLocation(),
-										Tran.GetLocation() + AsyncData.Direction * (AsyncData.MinDistance + 100),
-										Tran.GetRotation() * AsyncData.Quat,
-										ObjectQueryParams,
-										Prim->GetCollisionShape(),
-										QueryParams,
-										&MoveTargetAsyncDelegate);
+		auto Loc		= Prim->GetComponentLocation();
+		auto Rot		= Prim->GetComponentQuat() * AsyncData.RelativeQuat;
+		auto SweepStart	= Loc + FVector(0,0,10);
+		auto SweepEnd	= Loc + AsyncData.Direction * (AsyncData.MinDistance + 50);
 
-		AsyncData.Count++;
+//		DrawDebugLine(GetWorld(), SweepStart, SweepEnd, FColor::Cyan);
+//		DrawDebugBox(GetWorld(), Actor->GetActorLocation(), Shape.GetExtent(), Actor->GetActorQuat(), FColor::Yellow);
+
+		AsyncData.Count += MyPhysics::PrimitiveComponentAsyncSweepByObjectType(
+											World, EAsyncTraceType::Single,
+											SweepStart, SweepEnd, Rot,
+											ObjectQueryParams,
+											Prim,
+											QueryParams,
+											&MoveTargetAsyncDelegate);
 	};
 
-	auto& TargetTran = Target->GetActorTransform();
-	auto NewTran = TargetTran;
-	NewTran.SetLocation(NewLoc);
-
-	auto InvTargetTran = TargetTran.Inverse();
-	auto ReletiveTran = InvTargetTran * NewTran;
-
-	AsyncSweep(Target, NewTran);
+	AsyncSweep(Target);
 
 	if (Group)
 	{
 		for (auto& Member : Group->GetMembers())
 		{
-			if (!Member)
-				continue;
-			auto* P = Member->GetOwner();
-			if (P != Target)
-				AsyncSweep(P, P->GetActorTransform() * ReletiveTran);
+			if (Member && Member->GetOwner() != Target)
+				AsyncSweep(Member->GetOwner());
 		}
 	}
 
@@ -377,7 +376,7 @@ void UMyUltraHandComponent::MoveTargetAsyncResult(const FTraceHandle& TraceHandl
 
 	auto NewTran = Target->GetActorTransform();
 	NewTran.SetLocation(NewTran.GetLocation() + AsyncData.Direction * AsyncData.MinDistance);
-	NewTran.SetRotation(AsyncData.Quat);
+	NewTran.SetRotation(NewTran.GetRotation() * AsyncData.RelativeQuat);
 
 	MyFuseHelper::SetActorTransform(Target, NewTran);
 }
