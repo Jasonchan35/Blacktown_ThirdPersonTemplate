@@ -341,7 +341,7 @@ void MyFuseHelper::SeparateIslandGroup(UMyFusedGroup* Group)
 		VisitedList.Reset();
 
 		PendingList.Add(Group->Members[0]);
-		// scan	all member reachable by Members[0]
+		// scan	reachable from Members[0]
 
 		while (PendingList.Num() > 0)
 		{
@@ -351,16 +351,22 @@ void MyFuseHelper::SeparateIslandGroup(UMyFusedGroup* Group)
 
 			for (auto& Glue : Fuse->Glues)
 			{
-				if (Glue->Fuse1 && !Glue->Fuse1->TempVisited)
+				if (!Glue)
+					continue;
+
+				auto Fuse1 = Glue->Fuse1;
+				auto Fuse2 = Glue->Fuse2;
+
+				if (Fuse1 && !Fuse1->TempVisited)
 				{
-					Glue->Fuse1->TempVisited = true;
-					PendingList.Add(Glue->Fuse1);
+					Fuse1->TempVisited = true;
+					PendingList.Add(Fuse1);
 				}
 
-				if (Glue->Fuse2 && !Glue->Fuse2->TempVisited)
+				if (Fuse2 && !Fuse2->TempVisited)
 				{
-					Glue->Fuse2->TempVisited = true;
-					PendingList.Add(Glue->Fuse1);
+					Fuse2->TempVisited = true;
+					PendingList.Add(Fuse2);
 				}
 			}
 		}
@@ -374,11 +380,8 @@ void MyFuseHelper::SeparateIslandGroup(UMyFusedGroup* Group)
 
 		for (auto* Fuse : VisitedList)
 		{
-			NewGroup->Members.Add(Fuse);
-			Fuse->FusedGroup = NewGroup;
+			AddGroupMember(NewGroup, Fuse);
 		}
-
-		Group->Members.RemoveAll([](auto& It){ return It->TempVisited; });
 	}
 
 }

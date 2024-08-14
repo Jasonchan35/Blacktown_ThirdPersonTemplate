@@ -96,7 +96,6 @@ public:
 friend class AMyFusedGlue;
 friend struct MyFuseHelper;
 protected:
-	UFUNCTION()
 
 	virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override;
 
