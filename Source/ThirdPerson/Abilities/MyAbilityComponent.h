@@ -13,6 +13,7 @@ class UMyAbilityComponent : public UActorComponent
 public:
 	virtual void IA_Confirm_Started() {}
 	virtual void IA_Cancel_Started() {}
+	virtual void IA_Break_Started() {}
 	virtual void IA_DPad_Triggered(const FVector2D& Value) {}
 
 	virtual void SetAbilityActive(bool Active) {}

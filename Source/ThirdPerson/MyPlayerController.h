@@ -33,6 +33,9 @@ class AMyPlayerController : public APlayerController
 	TObjectPtr<class UInputAction> IA_Cancel;
 
 	UPROPERTY(Category = Input, EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<class UInputAction> IA_Break;
+
+	UPROPERTY(Category = Input, EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<class UInputAction> IA_AbilityA;
 
 	UPROPERTY(Category = UI, VisibleAnywhere)
@@ -66,6 +69,8 @@ protected:
 
 	void IA_Confirm_Started	(const FInputActionValue& Value);
 	void IA_Cancel_Started	(const FInputActionValue& Value);
+
+	void IA_Break_Started	(const FInputActionValue& Value);
 
 	void IA_AbilityA_Started(const FInputActionValue& Value);
 };

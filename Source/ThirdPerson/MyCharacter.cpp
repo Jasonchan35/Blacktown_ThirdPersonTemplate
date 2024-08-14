@@ -112,3 +112,9 @@ void AMyCharacter::IA_Cancel_Started()
 	if (CurrentAbilityComponent)
 		CurrentAbilityComponent->IA_Cancel_Started();
 }
+
+void AMyCharacter::IA_Break_Started()
+{
+	if (CurrentAbilityComponent)
+		CurrentAbilityComponent->IA_Break_Started();
+}

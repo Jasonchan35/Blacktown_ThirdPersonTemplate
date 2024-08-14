@@ -58,6 +58,7 @@ protected:
 	virtual void IA_DPad_Triggered(const FVector2D& Value) override;
 	virtual void IA_Confirm_Started() override;
 	virtual void IA_Cancel_Started() override;
+	virtual void IA_Break_Started() override;
 
 private:
 	TWeakObjectPtr<AActor>	TargetActor;

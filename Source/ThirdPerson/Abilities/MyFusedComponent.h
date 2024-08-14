@@ -4,14 +4,19 @@
 #include "MyFusedComponent.generated.h"
 
 class UMyFusedGroup;
+class AMyFusedGlue;
 
 struct MyFuseHelper
 {
 	static void FuseActors(	AActor* Actor1, const FVector& RefPoint1,
 							AActor* Actor2, const FVector& RefPoint2);
 
-	static void AddMember(UMyFusedGroup* Group, UMyFusedComponent* Comp);
-	static void RemoveMember(UMyFusedGroup* Group, UMyFusedComponent* Comp);
+	static void AddGroupMember(UMyFusedGroup* Group, UMyFusedComponent* Comp);
+	static void RemoveGroupMember(UMyFusedGroup* Group, UMyFusedComponent* Comp);
+
+	static void MergeGroup(UMyFusedGroup* Group, UMyFusedGroup* FromGroup);
+	static void SeparateIslandGroup(UMyFusedGroup* Group);
+
 	static UMyFusedGroup* FindGroup(AActor* Actor);
 
 	static bool MatchActorOrGroup(AActor* Actor, AActor* ActorOrGroup);
@@ -19,6 +24,41 @@ struct MyFuseHelper
 
 	static void SetActorState(AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial);
 	static void SetActorTransform(AActor* Actor, const FTransform& NewTran);
+
+	static void BreakFusedActor(AActor* Actor);
+
+	static void DestroyGlue(AMyFusedGlue* Glue);
+	static void DestroyGluesInFuseComponent(UMyFusedComponent* Fuse);
+	static void DestroyFuseComponent(UMyFusedComponent* Fuse);
+};
+
+UCLASS()
+class AMyFusedGlue : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	AMyFusedGlue();
+	
+friend struct MyFuseHelper;
+protected:
+	virtual void PostInitializeComponents() override;
+	virtual void BeginDestroy() override;
+
+	UFUNCTION()
+	void OnConstraintBroken(int32 ConstraintIndex);
+
+	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UPhysicsConstraintComponent>	Constraint;
+
+	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UMyFusedGroup>	Group;
+
+	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UMyFusedComponent>	Fuse1;
+
+	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UMyFusedComponent>	Fuse2;
 };
 
 UCLASS()
@@ -29,17 +69,20 @@ public:
 	UMyFusedGroup();
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	TSubclassOf<AActor>	GlueMeshClass;
+	TSubclassOf<AMyFusedGlue>	GlueActorClass;
 
-	TArrayView<AActor*>	GetMembers() { return Members; }
+	TArrayView<UMyFusedComponent*>	GetMembers() { return Members; }
 
-	bool	HasMember(AActor* Actor);
+	bool HasMember(AActor* Actor);
 
 friend struct MyFuseHelper;
 protected:
 
 	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
-	TArray<AActor*>	Members;
+	TArray<UMyFusedComponent*>	Members;
+
+	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
+	TArray<AMyFusedGlue*>	Glues;
 };
 
 UCLASS()
@@ -48,13 +91,12 @@ class UMyFusedComponent : public USceneComponent
 	GENERATED_BODY()
 
 public:
-
 	UMyFusedGroup*	GetFusedGroup() { return FusedGroup.Get(); }
 
+friend class AMyFusedGlue;
 friend struct MyFuseHelper;
 protected:
 	UFUNCTION()
-	void OnConstraintBroken(int32 ConstraintIndex);
 
 	virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override;
 
@@ -62,8 +104,7 @@ protected:
 	TObjectPtr<UMyFusedGroup>	FusedGroup;
 
 	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UPhysicsConstraintComponent>	Constraint;
+	TArray<AMyFusedGlue*>		Glues;
 
-	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<AActor>	GlueMesh;
+	bool TempVisited;
 };

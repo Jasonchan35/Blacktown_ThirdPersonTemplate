@@ -30,7 +30,7 @@ bool MyFuseHelper::MatchGroup(AActor* Actor, UMyFusedGroup* Group)
 
 	for (auto& Member : Group->GetMembers())
 	{
-		if (Member == Actor)
+		if (Member && Member->GetOwner() == Actor)
 			return true;
 	}
 
@@ -43,19 +43,20 @@ void MyFuseHelper::FuseActors(	AActor* Actor1, const FVector& RefPoint1,
 	if (!Actor1 || !Actor2)
 		return;
 
-	auto* Prim1 = Actor1->FindComponentByClass<UPrimitiveComponent>();
-	auto* Prim2 = Actor2->FindComponentByClass<UPrimitiveComponent>();
-
-	if (!Prim1 || !Prim2)
-		return;
+	auto* Fuse1 = MyActorUtil::GetOrNewComponent<UMyFusedComponent>(Actor1);
+	auto* Fuse2 = MyActorUtil::GetOrNewComponent<UMyFusedComponent>(Actor2);
 
 	UMyFusedGroup* Group = nullptr;
+	{ // Pick Group from FusedComponents
+		auto* Group1 = Fuse1->FusedGroup.Get();
+		auto* Group2 = Fuse2->FusedGroup.Get();
 
-	{ // pick exists group if possible
-		auto* Group1 = FindGroup(Actor1);
-		auto* Group2 = FindGroup(Actor2);
-
-		if (Group1)
+		if (Group1 && Group2)
+		{
+			MergeGroup(Group1, Group2);
+			Group  = Group1;
+		}
+		else if (Group1)
 			Group = Group1;
 		else if (Group2)
 			Group = Group2;
@@ -63,35 +64,27 @@ void MyFuseHelper::FuseActors(	AActor* Actor1, const FVector& RefPoint1,
 			Group = NewObject<UMyFusedGroup>();
 	}
 
-	Group->Members.Remove(nullptr);
+	if (!Group->GlueActorClass)
+		return;
 
-	auto* NewFuse1 = MyActorUtil::NewComponent<UMyFusedComponent>(Actor1);
-	auto* NewFuse2 = MyActorUtil::NewComponent<UMyFusedComponent>(Actor2);
+	AddGroupMember(Group, Fuse1);
+	AddGroupMember(Group, Fuse2);
 
-	AddMember(Group, NewFuse1);
-	AddMember(Group, NewFuse2);
+	auto* Prim1 = Actor1->FindComponentByClass<UPrimitiveComponent>();
+	auto* Prim2 = Actor2->FindComponentByClass<UPrimitiveComponent>();
 
-	//Prim1->SetSimulatePhysics(true);
-	//Prim2->SetSimulatePhysics(true);
+	if (!Prim1 || !Prim2)
+		return;
 
-	auto* Constraint = MyActorUtil::NewComponent<UPhysicsConstraintComponent>(NewFuse1);
+	auto* World = Actor1->GetWorld();
 
-	Constraint->SetDisableCollision(true);
-
-	Constraint->OnConstraintBroken.AddDynamic(NewFuse1, &UMyFusedComponent::OnConstraintBroken);
-	Constraint->OnConstraintBroken.AddDynamic(NewFuse2, &UMyFusedComponent::OnConstraintBroken);
+	auto* NewGlue = World->SpawnActor<AMyFusedGlue>(Group->GlueActorClass.Get(), RefPoint1, FRotator::ZeroRotator);
+	if (!NewGlue)
+		return;
+	
+	auto& Constraint = NewGlue->Constraint;
 
 	Constraint->SetWorldLocation(RefPoint1);
-
-	Constraint->SetLinearXLimit(ELinearConstraintMotion::LCM_Locked, 0);
-	Constraint->SetLinearYLimit(ELinearConstraintMotion::LCM_Locked, 0);
-	Constraint->SetLinearZLimit(ELinearConstraintMotion::LCM_Locked, 0);
-
-	Constraint->SetAngularDriveMode(EAngularDriveMode::TwistAndSwing);
-	Constraint->SetAngularTwistLimit( EAngularConstraintMotion::ACM_Locked, 0);
-	Constraint->SetAngularSwing1Limit(EAngularConstraintMotion::ACM_Locked, 0);
-	Constraint->SetAngularSwing2Limit(EAngularConstraintMotion::ACM_Locked, 0);
-
 	Constraint->SetConstrainedComponents(Prim1, NAME_None, Prim2, NAME_None);
 
 	auto ReletiveRefPoint1 = Actor1->GetActorTransform().InverseTransformPosition(RefPoint1);
@@ -102,23 +95,15 @@ void MyFuseHelper::FuseActors(	AActor* Actor1, const FVector& RefPoint1,
 
 	Constraint->UpdateConstraintFrames();
 
-	if (!Group->GlueMeshClass)
-		return;
+	NewGlue->AttachToActor(Actor1, FAttachmentTransformRules::KeepWorldTransform);
 
-	auto* GlueMesh = Actor1->GetWorld()->SpawnActor(Group->GlueMeshClass.Get(), &RefPoint1);
-	if (!GlueMesh)
-		return;
+	NewGlue->Fuse1 = Fuse1;
+	NewGlue->Fuse2 = Fuse2;
+	NewGlue->Group = Group;
 
-	GlueMesh->AttachToActor(Actor1, FAttachmentTransformRules::KeepWorldTransform);
-
-	if (auto* GluePrim = GlueMesh->FindComponentByClass<UPrimitiveComponent>())
-	{
-		GluePrim->SetEnableGravity(false);
-		GluePrim->SetSimulatePhysics(false);
-		GluePrim->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	}
-
-	NewFuse1->GlueMesh = GlueMesh;
+	Group->Glues.Add(NewGlue);
+	Fuse1->Glues.Add(NewGlue);
+	Fuse2->Glues.Add(NewGlue);
 }
 
 void MyFuseHelper::SetActorState(AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial)
@@ -148,8 +133,12 @@ void MyFuseHelper::SetActorState(AActor* Actor, bool SimulatePhysics, UMaterialI
 	{
 		for (auto* Member : Group->GetMembers())
 		{
-			if (Member && Member != Actor)
-				SetToActor(Member, SimulatePhysics, OverlayMaterial);
+			if (!Member)
+				continue;
+
+			auto* P = Member->GetOwner();
+			if (P != Actor)
+				SetToActor(P, SimulatePhysics, OverlayMaterial);
 		}
 	}
 }
@@ -182,15 +171,131 @@ void MyFuseHelper::SetActorTransform(AActor* Actor, const FTransform& NewTran)
 	{
 		for (auto* Member : Group->GetMembers())
 		{
-			if (Member && Member != Actor)
-				SetToActor(Member, Member->GetActorTransform() * ReletiveTran);
+			if (!Member)
+				continue;
+			auto* P = Member->GetOwner();
+			if (P != Actor)
+				SetToActor(P, P->GetActorTransform() * ReletiveTran);
 		}
 	}
 }
 
+void MyFuseHelper::BreakFusedActor(AActor* Actor)
+{
+	if (!Actor)
+		return;
+
+	auto* Fuse = Actor->FindComponentByClass<UMyFusedComponent>();
+	if (!Fuse)
+		return;
+
+	UMaterialInterface* OverlayMaterial = MyActorUtil::GetOverlayMaterial(Actor);
+
+	SetActorState(Actor, true, nullptr);
+	DestroyGluesInFuseComponent(Fuse);
+	SetActorState(Actor, true, OverlayMaterial);
+}
+
+void MyFuseHelper::DestroyFuseComponent(UMyFusedComponent* Fuse)
+{
+	if (!Fuse)
+		return;
+
+	DestroyGluesInFuseComponent(Fuse);
+
+	if (auto* Group = Fuse->FusedGroup.Get())
+	{
+		RemoveGroupMember(Group, Fuse);
+		SeparateIslandGroup(Group);
+	}
+
+	if (!Fuse->IsBeingDestroyed())
+		Fuse->DestroyComponent();
+}
+
+void MyFuseHelper::DestroyGluesInFuseComponent(UMyFusedComponent* Fuse)
+{
+	if (!Fuse)
+		return;
+
+	int GlueCount = Fuse->Glues.Num();
+	for (int i = 0; i < GlueCount; i++)
+	{
+		if (Fuse->Glues.Num() <= 0)
+			break;
+
+		DestroyGlue(Fuse->Glues.Last());
+	}
+}
+
+void MyFuseHelper::DestroyGlue(AMyFusedGlue* Glue)
+{
+	if (!Glue)
+		return;
+
+	auto Func = [](AMyFusedGlue* Glue, UMyFusedComponent* Fuse) -> void
+	{
+		if (!Fuse)
+			return;
+
+		Fuse->Glues.Remove(Glue);
+		Fuse->Glues.Remove(nullptr);
+		if (Fuse->Glues.Num() <= 0)
+			DestroyFuseComponent(Fuse);
+	};
+
+	Func(Glue, Glue->Fuse1);
+	Func(Glue, Glue->Fuse2);
+
+	if (!Glue->IsActorBeingDestroyed())
+		Glue->Destroy();
+}
+
+AMyFusedGlue::AMyFusedGlue()
+{
+	MyCDO::CreateComponent(this, Constraint);
+	SetRootComponent(Constraint);
+
+	Constraint->SetDisableCollision(true);
+
+	Constraint->SetLinearXLimit(ELinearConstraintMotion::LCM_Locked, 0);
+	Constraint->SetLinearYLimit(ELinearConstraintMotion::LCM_Locked, 0);
+	Constraint->SetLinearZLimit(ELinearConstraintMotion::LCM_Locked, 0);
+
+	Constraint->SetAngularDriveMode(EAngularDriveMode::TwistAndSwing);
+	Constraint->SetAngularTwistLimit( EAngularConstraintMotion::ACM_Locked, 0);
+	Constraint->SetAngularSwing1Limit(EAngularConstraintMotion::ACM_Locked, 0);
+	Constraint->SetAngularSwing2Limit(EAngularConstraintMotion::ACM_Locked, 0);
+}
+
+void AMyFusedGlue::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	Constraint->OnConstraintBroken.AddDynamic(this, &ThisClass::OnConstraintBroken);
+
+	if (auto* Prim = FindComponentByClass<UPrimitiveComponent>())
+	{
+		Prim->SetEnableGravity(false);
+		Prim->SetSimulatePhysics(false);
+		Prim->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+}
+
+void AMyFusedGlue::BeginDestroy()
+{
+	MyFuseHelper::DestroyGlue(this);
+	Super::BeginDestroy();
+}
+
+void AMyFusedGlue::OnConstraintBroken(int32 ConstraintIndex)
+{
+	this->Destroy();
+}
+
 UMyFusedGroup::UMyFusedGroup()
 {
-	MY_CDO_FINDER(GlueMeshClass, TEXT("/Game/ThirdPerson/Blueprints/Objects/BP_FusedGlue"));
+	MY_CDO_FINDER(GlueActorClass, TEXT("/Game/ThirdPerson/Blueprints/Objects/BP_FusedGlue"));
 }
 
 bool UMyFusedGroup::HasMember(AActor* Actor)
@@ -200,19 +305,85 @@ bool UMyFusedGroup::HasMember(AActor* Actor)
 
 	for (auto& Member : Members)
 	{
-		if (Member == Actor)
+		if (Member && Member->GetOwner() == Actor)
 			return true;
 	}
 
 	return false;
 }
 
-void UMyFusedComponent::OnConstraintBroken(int32 ConstraintIndex)
+void MyFuseHelper::MergeGroup(UMyFusedGroup* Group, UMyFusedGroup* FromGroup)
 {
-	this->DestroyComponent();
+	if (!Group || !FromGroup || FromGroup == Group)
+		return;
+
+	while (FromGroup->Members.Num() > 0)
+	{
+		AddGroupMember(Group, FromGroup->Members.Last());
+	}
 }
 
-void MyFuseHelper::AddMember(UMyFusedGroup* Group, UMyFusedComponent* Comp)
+void MyFuseHelper::SeparateIslandGroup(UMyFusedGroup* Group)
+{
+	if (!Group)
+		return;
+
+	Group->Members.Remove(nullptr);
+
+	for (auto& Fuse : Group->Members)
+		Fuse->TempVisited = 0;
+
+	TArray<UMyFusedComponent*, TInlineAllocator<64>>	PendingList;
+	TArray<UMyFusedComponent*, TInlineAllocator<64>>	VisitedList;
+
+	while (Group->Members.Num() > 0) {
+		PendingList.Reset();
+		VisitedList.Reset();
+
+		PendingList.Add(Group->Members[0]);
+		// scan	all member reachable by Members[0]
+
+		while (PendingList.Num() > 0)
+		{
+			auto* Fuse = PendingList.Pop(EAllowShrinking::No);
+			Fuse->TempVisited = true;
+			VisitedList.Add(Fuse);
+
+			for (auto& Glue : Fuse->Glues)
+			{
+				if (Glue->Fuse1 && !Glue->Fuse1->TempVisited)
+				{
+					Glue->Fuse1->TempVisited = true;
+					PendingList.Add(Glue->Fuse1);
+				}
+
+				if (Glue->Fuse2 && !Glue->Fuse2->TempVisited)
+				{
+					Glue->Fuse2->TempVisited = true;
+					PendingList.Add(Glue->Fuse1);
+				}
+			}
+		}
+
+		if (VisitedList.Num() == Group->Members.Num())
+			return; // no more separate group
+
+		auto* NewGroup = NewObject<UMyFusedGroup>();
+
+		NewGroup->Members.Reserve(VisitedList.Num());
+
+		for (auto* Fuse : VisitedList)
+		{
+			NewGroup->Members.Add(Fuse);
+			Fuse->FusedGroup = NewGroup;
+		}
+
+		Group->Members.RemoveAll([](auto& It){ return It->TempVisited; });
+	}
+
+}
+
+void MyFuseHelper::AddGroupMember(UMyFusedGroup* Group, UMyFusedComponent* Comp)
 {
 	if (!Comp)
 		return;
@@ -221,34 +392,26 @@ void MyFuseHelper::AddMember(UMyFusedGroup* Group, UMyFusedComponent* Comp)
 		return;
 
 	if (Comp->FusedGroup)
-		RemoveMember(Comp->FusedGroup, Comp);
+		RemoveGroupMember(Comp->FusedGroup, Comp);
 
 	Comp->FusedGroup = Group;
-	Group->Members.AddUnique(Comp->GetOwner());
+	Group->Members.Add(Comp);
 }
 
-void MyFuseHelper::RemoveMember(UMyFusedGroup* Group, UMyFusedComponent* Comp)
+void MyFuseHelper::RemoveGroupMember(UMyFusedGroup* Group, UMyFusedComponent* Comp)
 {
-	if (!Comp)
+	if (!Group || !Comp)
 		return;
 
 	if (Comp->FusedGroup != Group)
 		return;
 
 	Comp->FusedGroup = nullptr;
-	Group->Members.Remove(Comp->GetOwner());
+	Group->Members.Remove(Comp);
 }
 
 void UMyFusedComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
 {
+	MyFuseHelper::DestroyFuseComponent(this);
 	Super::OnComponentDestroyed(bDestroyingHierarchy);
-
-	if (FusedGroup)
-		MyFuseHelper::RemoveMember(FusedGroup, this);
-
-	if (Constraint)
-		Constraint->DestroyComponent();
-
-	if (GlueMesh)
-		GlueMesh->Destroy();
 }

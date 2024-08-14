@@ -16,6 +16,7 @@ AMyPlayerController::AMyPlayerController()
 	MY_CDO_FINDER(IA_Jump,				TEXT("/Game/ThirdPerson/Input/Actions/IA_Jump"));
 	MY_CDO_FINDER(IA_Confirm,			TEXT("/Game/ThirdPerson/Input/Actions/IA_Confirm"));
 	MY_CDO_FINDER(IA_Cancel,			TEXT("/Game/ThirdPerson/Input/Actions/IA_Cancel"));
+	MY_CDO_FINDER(IA_Break,				TEXT("/Game/ThirdPerson/Input/Actions/IA_Break"));
 	MY_CDO_FINDER(IA_AbilityA,			TEXT("/Game/ThirdPerson/Input/Actions/IA_AbilityA"));
 	MY_CDO_FINDER(UI_MainWidgetClass,	TEXT("/Game/ThirdPerson/UI/WBP_MyUIMainWidget"));
 }
@@ -69,6 +70,7 @@ void AMyPlayerController::SetupInputComponent()
 		MY_BIND_INPUT_ACTION(IA_Jump,		Completed);
 		MY_BIND_INPUT_ACTION(IA_Confirm,	Started);
 		MY_BIND_INPUT_ACTION(IA_Cancel,		Started);
+		MY_BIND_INPUT_ACTION(IA_Break,		Started);
 		MY_BIND_INPUT_ACTION(IA_AbilityA,	Started);
 
 	#undef MY_BIND_INPUT_ACTION
@@ -155,3 +157,8 @@ void AMyPlayerController::IA_Cancel_Started(const FInputActionValue& Value)
 		Ch->IA_Cancel_Started();
 }
 
+void AMyPlayerController::IA_Break_Started(const FInputActionValue& Value)
+{
+	if (auto* Ch = GetMyCharacter())
+		Ch->IA_Break_Started();
+}

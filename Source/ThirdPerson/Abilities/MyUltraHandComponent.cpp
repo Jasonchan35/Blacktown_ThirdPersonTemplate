@@ -40,6 +40,14 @@ void UMyUltraHandComponent::IA_Cancel_Started()
 	}
 }
 
+void UMyUltraHandComponent::IA_Break_Started()
+{
+	if (Mode != EMyUltraHandMode::HoldTarget)
+		return;
+
+	MyFuseHelper::BreakFusedActor(TargetActor.Get());
+}
+
 void UMyUltraHandComponent::SetTargetActor(AActor* Actor)
 {
 	auto* Cur = TargetActor.Get();
@@ -242,6 +250,7 @@ bool UMyUltraHandComponent::DoTickFuseTarget(float DeltaTime)
 	return true;
 }
 
+
 bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 {
 	auto* Target = TargetActor.Get();
@@ -298,8 +307,8 @@ bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 	{
 		for (auto& Member : Group->GetMembers())
 		{
-			if (Member && Member != Target)
-				QueryParams.AddIgnoredActor(Member);
+			if (Member && Member->GetOwner() != Target)
+				QueryParams.AddIgnoredActor(Member->GetOwner());
 		}
 	}
 
@@ -343,8 +352,11 @@ bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 	{
 		for (auto& Member : Group->GetMembers())
 		{
-			if (Member && Member != Target)
-				AsyncSweep(Member, Member->GetActorTransform() * ReletiveTran);
+			if (!Member)
+				continue;
+			auto* P = Member->GetOwner();
+			if (P != Target)
+				AsyncSweep(P, P->GetActorTransform() * ReletiveTran);
 		}
 	}
 
@@ -406,8 +418,11 @@ bool UMyUltraHandComponent::DoSearchFusable()
 	{
 		for(auto& Member : Group->GetMembers())
 		{
-			if (Member && Member != Target)
-				QueryParams.AddIgnoredActor(Member);
+			if (!Member)
+				continue;
+			auto* P = Member->GetOwner();
+			if (P != Target)
+				QueryParams.AddIgnoredActor(P);
 		}
 	}
 
