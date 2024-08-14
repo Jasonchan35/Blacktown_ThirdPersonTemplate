@@ -44,6 +44,9 @@ class UMyUltraHandComponent : public UMyAbilityComponent
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<class UMaterialInterface> MI_FusableOverlay;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<class UNiagaraSystem>	FXS_GrabTarget;
+
 public:
 	UMyUltraHandComponent();
 
@@ -58,6 +61,7 @@ public:
 	bool	HasFusable() const { return bool(Fusable); }
 
 protected:
+	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction) override;
 
 	virtual void IA_DPad_Triggered(const FVector2D& Value) override;
@@ -102,6 +106,8 @@ private:
 
 	FQuat	GrabTargetQuat;
 	FVector	GrabTargetVector;
+
+	TWeakObjectPtr<class UNiagaraComponent> NiagaraComponent;
 
 	struct FFusable
 	{

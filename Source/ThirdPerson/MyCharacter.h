@@ -38,6 +38,9 @@ class AMyCharacter : public ACharacter
 	UPROPERTY(Category = Ability, VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UMyUltraHandComponent>	UltraHandComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<class UNiagaraComponent> NiagaraComponent;
+
 public:
 	AMyCharacter();
 	void		SetCurrentAbility(EMyAbility Ability);
@@ -45,6 +48,9 @@ public:
 	UMyAbilityComponent* GetCurrentAbilityComponent() { return CurrentAbilityComponent.Get(); }
 
 	AMyPlayerController* GetPlayerController();
+
+	class UNiagaraComponent* GetNiagaraComponent() { return NiagaraComponent.Get(); }
+
 
 	void IA_DPad_Triggered(const FVector2D& Value);
 	void IA_Confirm_Started();

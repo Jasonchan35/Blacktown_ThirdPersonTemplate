@@ -34,8 +34,16 @@ template<class T> struct MY_CDO_FINDER_Helper< TObjectPtr<T> >
 struct MyCDO
 {
 	template<class COMP>
-	static void CreateComponent(AActor* Actor, TObjectPtr<COMP>& OutComp)
+	static void CreateComponent(AActor* Actor, TObjectPtr<COMP>& OutComp, FName Name = NAME_None)
 	{
-		OutComp = Actor->CreateDefaultSubobject<COMP>(COMP::StaticClass()->GetFName());
+		OutComp = Actor->CreateDefaultSubobject<COMP>(Name.IsNone() ? COMP::StaticClass()->GetFName() : Name);
+	}
+
+	template<class COMP>
+	static void CreateComponent(USceneComponent* Parent, TObjectPtr<COMP>& OutComp, FName Name = NAME_None)
+	{
+		auto* Actor = Parent->GetOwner();
+		CreateComponent(Actor, OutComp, Name);
+		OutComp->SetupAttachment(Parent);
 	}
 };

@@ -16,8 +16,9 @@ public class ThirdPerson : ModuleRules
 			"Engine", 
 			"InputCore", 
 			"EnhancedInput", 
+			"Niagara",
 			"Slate", 
-			"SlateCore", 
+			"SlateCore",
 			"UMG"
 
 		});

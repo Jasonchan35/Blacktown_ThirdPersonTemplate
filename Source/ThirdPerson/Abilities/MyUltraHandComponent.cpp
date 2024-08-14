@@ -19,8 +19,10 @@ UMyUltraHandComponent::UMyUltraHandComponent()
 	GrabTargetDampingFactor = 8;
 	FuseTargetDampingFactor = 3;
 
-	MY_CDO_FINDER(MI_GrabbableOverlay, TEXT("/Game/ThirdPerson/Materials/MI_GrabbableOverlay"));
-	MY_CDO_FINDER(MI_FusableOverlay,   TEXT("/Game/ThirdPerson/Materials/MI_FusableOverlay"));
+	MY_CDO_FINDER(MI_GrabbableOverlay,	TEXT("/Game/ThirdPerson/Materials/MI_GrabbableOverlay"));
+	MY_CDO_FINDER(MI_FusableOverlay,	TEXT("/Game/ThirdPerson/Materials/MI_FusableOverlay"));
+	MY_CDO_FINDER(FXS_GrabTarget,		TEXT("/Game/ThirdPerson/VFX/FXS_GrabTarget"));
+
 }
 
 void UMyUltraHandComponent::IA_Confirm_Started()
@@ -59,6 +61,7 @@ void UMyUltraHandComponent::SetTargetActor(AActor* Actor)
 	{
 		ResetSearchFusableTempOverlaps();
 		MyFuseHelper::SetActorState(Cur, true, nullptr);
+		NiagaraComponent->SetVisibility(false);
 	}
 
 	TargetActor = Actor;
@@ -82,6 +85,20 @@ void UMyUltraHandComponent::SetAbilityActive(bool Active)
 		Fusable.Reset();
 		if (auto* Ch = GetMyCharacter())
 			Ch->SetCurrentAbility(EMyAbility::None);
+	}
+}
+
+void UMyUltraHandComponent::BeginPlay()
+{
+	Super::BeginPlay();
+	if (auto* Ch = GetMyCharacter())
+	{
+		NiagaraComponent = Ch->GetNiagaraComponent();
+		if (NiagaraComponent.Get())
+		{
+			NiagaraComponent->SetVisibility(false);
+			NiagaraComponent->SetAsset(FXS_GrabTarget);
+		}
 	}
 }
 
@@ -237,6 +254,13 @@ bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 	auto* Target = TargetActor.Get();
 	if (!Target) // Lost Target
 		return false;
+
+	if (NiagaraComponent.Get())
+	{
+		static FName NAME_BeamEnd(L"BeamEnd");
+		NiagaraComponent->SetVectorParameter(NAME_BeamEnd, Target->GetActorLocation());
+		NiagaraComponent->SetVisibility(true);
+	}
 
 	auto* Ch = GetMyCharacter();
 	auto* PC = GetMyPlayerController();
