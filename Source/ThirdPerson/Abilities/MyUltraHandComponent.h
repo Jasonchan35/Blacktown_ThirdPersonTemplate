@@ -77,10 +77,10 @@ protected:
 	virtual void IA_Break_Started() override;
 
 private:
+	static FName NAME_Color;
 	static FName NAME_BeamEnd;
 	static FName NAME_BeamWidthMin;
 	static FName NAME_BeamWidthMax;
-	static FName NAME_Color;
 
 	TWeakObjectPtr<AActor>	TargetActor;
 
@@ -104,13 +104,26 @@ private:
 
 	FTraceDelegate MoveTargetAsyncDelegate;
 	void MoveTargetAsyncResult(const FTraceHandle& TraceHandle, FTraceDatum& Data);
+	void MoveTargetAsyncCompleted();
 
 	struct FMoveTargetAsyncData
 	{
-		int		Count = 0;
-		float	MinDistance = 0;
+		FMoveTargetAsyncData() { Reset(); }
+		void Reset()
+		{
+			SweepCount = 0;
+			MoveDistance = 0;
+			HitCount = 0;
+			HitMinDistance = 0;
+		}
+		int		SweepCount;
+		double	MoveDistance;
 		FVector	Direction;
 		FQuat	RelativeQuat;
+
+		int		HitCount;
+		double	HitMinDistance;
+		FVector HitImpactNormal;
 	};
 	FMoveTargetAsyncData	MoveTargetAsyncData;
 

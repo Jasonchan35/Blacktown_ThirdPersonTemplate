@@ -300,15 +300,21 @@ void UMyUltraHandComponent::EnableFx(ANiagaraActor* NiagaraActor, bool Enable, c
 		return;
 
 	if (!Enable)
+	{
+		Nia->Deactivate();
 		Nia->SetVisibility(false);
+	}
 	else
 	{
 		NiagaraActor->SetActorLocation(Start);
 		Nia->SetVectorParameter(NAME_BeamEnd, End);
 
 		if (!Nia->IsVisible())
+		{
 			Nia->ReinitializeSystem();
-		Nia->SetVisibility(true);
+			Nia->Activate();
+			Nia->SetVisibility(true);
+		}
 	}
 }
 
@@ -347,34 +353,31 @@ bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 	Vector.Z = FMath::Clamp(Vector.Z, -GrabTargetHeightMax, GrabTargetHeightMax);
 	Vector.Z += 80; // add some extra Z to life object above the ground
 
-	auto GoalQuat  = FRotator(0, ControlRot.Yaw, 0).Quaternion() * GrabTargetQuat;
-	auto GoalLoc   = ChLoc + FRotator(0, ControlRot.Yaw, 0).RotateVector(Vector);
+	auto GoalQuat = FRotator(0, ControlRot.Yaw, 0).Quaternion() * GrabTargetQuat;
+
+	auto GoalLoc  = ChLoc + FRotator(0, ControlRot.Yaw, 0).RotateVector(Vector);
+	GoalLoc = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, GrabTargetDampingFactor);
+
+	FVector MoveVector = GoalLoc - TargetLoc;
 
 	// DrawDebugLine(GetWorld(), ChLoc, GoalLoc, FColor::Green, false, 0, 0, 0);
 	EnableFx(GrabTargetFxActor, true, ChLoc, GoalLoc);
 
-	FVector NewLoc  = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, GrabTargetDampingFactor);
-	FVector MoveVector = NewLoc - TargetLoc;
-
 	auto& AsyncData = MoveTargetAsyncData;
+	AsyncData.Reset();
+	AsyncData.MoveDistance		= MoveVector.Length();
+	AsyncData.HitMinDistance	= AsyncData.MoveDistance;
+	AsyncData.Direction			= MoveVector.GetSafeNormal();
+	AsyncData.RelativeQuat		= TargetQuat.Inverse() * GoalQuat;
 
-	AsyncData.Count			= 0;
-	AsyncData.MinDistance	= MoveVector.Length();
-	AsyncData.Direction		= MoveVector.GetSafeNormal();
-	AsyncData.RelativeQuat	= TargetQuat.Inverse() * GoalQuat;
+	if (FMath::IsNearlyZero(AsyncData.MoveDistance))
+		return true;
 
 	FCollisionQueryParams	QueryParams;
-	QueryParams.AddIgnoredActor(Target);
-
-	auto* Group = MyFuseHelper::FindGroup(Target);
-	if (Group)
+	MyFuseHelper::VisitMembers(Target, [&](AActor* Member)
 	{
-		for (auto& Member : Group->GetMembers())
-		{
-			if (Member && Member->GetOwner() != Target)
-				QueryParams.AddIgnoredActor(Member->GetOwner());
-		}
-	}
+		QueryParams.AddIgnoredActor(Member);
+	});
 
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);
@@ -386,42 +389,12 @@ bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 	if (!MoveTargetAsyncDelegate.IsBound())
 		MoveTargetAsyncDelegate.BindUObject(this, &ThisClass::MoveTargetAsyncResult);
 
-	auto AsyncSweep = [&](AActor* Actor) -> void
-	{
-		if (!Actor)
-			return;
-
-		auto* Prim = Actor->FindComponentByClass<UPrimitiveComponent>();
-		if (!Prim)
-			return;
-
-		auto Loc		= Prim->GetComponentLocation();
-		auto Rot		= Prim->GetComponentQuat() * AsyncData.RelativeQuat;
-		auto SweepStart	= Loc + AsyncData.Direction * 10;
-		auto SweepEnd	= Loc + AsyncData.Direction * (AsyncData.MinDistance + 150);
-
-		// DrawDebugLine(GetWorld(), SweepStart, SweepEnd, FColor::Cyan);
-
-		AsyncData.Count += MyPhysics::PrimitiveComponentAsyncSweepByObjectType(
-											World, EAsyncTraceType::Single,
-											SweepStart, SweepEnd, Rot,
-											ObjectQueryParams,
-											Prim,
-											QueryParams,
-											&MoveTargetAsyncDelegate);
-	};
-
-	AsyncSweep(Target);
-
-	if (Group)
-	{
-		for (auto& Member : Group->GetMembers())
-		{
-			if (Member && Member->GetOwner() != Target)
-				AsyncSweep(Member->GetOwner());
-		}
-	}
-
+	auto TraceStart = TargetLoc + AsyncData.Direction * 20;
+	auto TraceEnd   = TargetLoc + AsyncData.Direction * (AsyncData.MoveDistance + 80);
+	AsyncData.SweepCount += MyFuseHelper::AsyncSweepByObjectType(	Target, EAsyncTraceType::Single,
+																	TraceStart, TraceEnd, GoalQuat, 
+																	ObjectQueryParams, QueryParams, 
+																	&MoveTargetAsyncDelegate);
 	return true;
 }
 
@@ -431,13 +404,21 @@ void UMyUltraHandComponent::MoveTargetAsyncResult(const FTraceHandle& TraceHandl
 
 	for (auto& Hit : Data.OutHits)
 	{
-		AsyncData.MinDistance = FMath::Min(Hit.Distance, AsyncData.MinDistance);
+		if (AsyncData.HitMinDistance > Hit.Distance)
+		{
+			AsyncData.HitCount++;
+			AsyncData.HitMinDistance  = Hit.Distance;
+			AsyncData.HitImpactNormal = Hit.ImpactNormal;
+		}
 	}
 
-	AsyncData.Count--;
-	if (AsyncData.Count != 0)
-		return;
+	AsyncData.SweepCount--;
+	if (AsyncData.SweepCount == 0)
+		MoveTargetAsyncCompleted();
+}
 
+void UMyUltraHandComponent::MoveTargetAsyncCompleted()
+{
 	if (Mode != EMyUltraHandMode::GrabTarget)
 		return;
 
@@ -445,12 +426,51 @@ void UMyUltraHandComponent::MoveTargetAsyncResult(const FTraceHandle& TraceHandl
 	if (!Target)
 		return;
 
-	if (FMath::IsNearlyZero(AsyncData.MinDistance))
-		return;
+	auto& AsyncData = MoveTargetAsyncData;
+
+	auto RemainDistance = AsyncData.MoveDistance - AsyncData.HitMinDistance;
 
 	auto NewTran = Target->GetActorTransform();
-	NewTran.SetLocation(NewTran.GetLocation() + AsyncData.Direction * AsyncData.MinDistance);
+	auto NewLoc = NewTran.GetLocation() + AsyncData.Direction * AsyncData.HitMinDistance;
+	NewTran.SetLocation(NewLoc);
 	NewTran.SetRotation(NewTran.GetRotation() * AsyncData.RelativeQuat);
+
+#if 1 // Sliding Along the hit plane
+	if (AsyncData.HitCount > 0 && RemainDistance > 10)
+	{
+		FCollisionObjectQueryParams ObjectQueryParams;
+		ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);
+		ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+		ObjectQueryParams.AddObjectTypesToQuery(ECC_PhysicsBody);
+
+		FCollisionQueryParams	QueryParams;
+		QueryParams.AddIgnoredActor(GetOwner());
+		MyFuseHelper::VisitMembers(Target, [&](AActor* Member)
+		{
+			QueryParams.AddIgnoredActor(Member);
+		});
+
+		auto N   = AsyncData.HitImpactNormal;
+		auto Dir = AsyncData.Direction;
+		auto NewDir = Dir - Dir.Dot(N) * N;
+	
+		auto NewStart = NewLoc + NewDir * 10;
+		auto NewEnd   = NewLoc + NewDir * (RemainDistance + 50);
+		auto NewRot   = NewTran.GetRotation();
+		
+		FHitResult HitResult;
+		int NewHitCount = MyFuseHelper::SweepSingleByObjectType(
+												Target,
+												HitResult, 
+												NewStart, NewEnd, NewRot,
+												ObjectQueryParams,
+												QueryParams);
+
+		auto NewDistance = FMath::Min(RemainDistance, HitResult.Distance);
+		auto FinalLoc = NewStart + NewDir * NewDistance;
+		NewTran.SetLocation(FinalLoc);
+	}
+#endif
 
 	MyFuseHelper::SetActorTransform(Target, NewTran);
 }
@@ -474,19 +494,10 @@ bool UMyUltraHandComponent::DoSearchFusable()
 
 	FCollisionQueryParams	QueryParams;
 	QueryParams.AddIgnoredActor(GetOwner());
-	QueryParams.AddIgnoredActor(Target);
-
-	if (auto* Group = MyFuseHelper::FindGroup(Target))
+	MyFuseHelper::VisitMembers(Target, [&](AActor* Member)
 	{
-		for(auto& Member : Group->GetMembers())
-		{
-			if (!Member)
-				continue;
-			auto* P = Member->GetOwner();
-			if (P != Target)
-				QueryParams.AddIgnoredActor(P);
-		}
-	}
+		QueryParams.AddIgnoredActor(Member);
+	});
 
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
@@ -526,30 +537,28 @@ bool UMyUltraHandComponent::DoSearchFusable()
 			if (!Prim)
 				continue;
 
+			auto* BodyInstance = Prim->GetBodyInstance();
+			if (!BodyInstance)
+				continue;
+
 			auto SweepStart = SourceActor->GetActorLocation();
 			auto SweepRot	= SourceActor->GetActorQuat();
 
 			QueryParams.ClearIgnoredActors();
-			QueryParams.AddIgnoredActor(SourceActor);
-
-			if (auto* Group = MyFuseHelper::FindGroup(SourceActor))
+			MyFuseHelper::VisitMembers(SourceActor, [&](AActor* Member)
 			{
-				for (auto& Member : Group->GetMembers())
-				{
-					if (Member && Member->GetOwner() != SourceActor)
-						QueryParams.AddIgnoredActor(Member->GetOwner());
-				}
-			}
+				QueryParams.AddIgnoredActor(Member);
+			});
 
 			// DrawDebugLine(GetWorld(), SweepStart, SweepEnd, FColor::Cyan);
 
 			// Sweep nearby objects against Target Actor or Group
-			MyPhysics::PrimitiveComponentAsyncSweepByObjectType(
+			MyPhysics::AsyncSweepByObjectType(
 							GetWorld(),
 							EAsyncTraceType::Single,
 							SweepStart, SweepEnd, SweepRot,
 							ObjectQueryParams,
-							Prim,
+							BodyInstance,
 							QueryParams,
 							&SearchFusableAsyncDelegate,
 							i);

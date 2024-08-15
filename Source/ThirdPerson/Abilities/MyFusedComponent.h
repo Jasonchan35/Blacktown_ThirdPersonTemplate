@@ -27,6 +27,29 @@ struct MyFuseHelper
 	static void DestroyGlue(AMyFusedGlue* Glue);
 	static void DestroyGluesInFuseComponent(UMyFusedComponent* Fuse);
 	static void DestroyFuseComponent(UMyFusedComponent* Fuse);
+
+	template<class FUNC>
+	static void VisitMembers(AActor* Actor, FUNC Func);
+
+	static int AsyncSweepByObjectType(
+					AActor* Actor,
+					EAsyncTraceType InTraceType,
+					const FVector& Start,
+					const FVector& End, 
+					const FQuat& Rot, 
+					const FCollisionObjectQueryParams& ObjectQueryParams, 
+					const FCollisionQueryParams& Params = FCollisionQueryParams::DefaultQueryParam, 
+					const FTraceDelegate* InDelegate = nullptr, 
+					uint32 UserData = 0);
+
+	static int SweepSingleByObjectType(
+					AActor* Actor,
+					struct FHitResult& OutHit,
+					const FVector& Start, 
+					const FVector& End, 
+					const FQuat& Rot, 
+					const FCollisionObjectQueryParams& ObjectQueryParams, 
+					const FCollisionQueryParams& Params = FCollisionQueryParams::DefaultQueryParam);
 };
 
 UCLASS()
@@ -104,3 +127,24 @@ protected:
 
 	bool TempVisited;
 };
+
+//--------
+
+template <class FUNC>
+inline void MyFuseHelper::VisitMembers(AActor* Actor, FUNC Func)
+{
+	if (!Actor)
+		return;
+
+	Func(Actor);
+
+	auto* Group = MyFuseHelper::FindGroup(Actor);
+	if (!Group)
+		return;
+
+	for (auto& Member : Group->GetMembers())
+	{
+		if (Member && Member->GetOwner() != Actor)
+			Func(Member->GetOwner());
+	}
+}

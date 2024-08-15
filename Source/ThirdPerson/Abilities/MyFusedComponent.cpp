@@ -83,75 +83,38 @@ void MyFuseHelper::FuseActors(	AActor* Actor1, const FVector& RefPoint1,
 
 void MyFuseHelper::SetActorState(AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial)
 {
-	auto SetToActor = [](AActor* Actor, bool SimulatePhysics, UMaterialInterface* OverlayMaterial) -> void
+	VisitMembers(Actor, [&](AActor* Member) -> void
 	{
-		if (!Actor)
+		if (!Member)
 			return;
 
-		auto* Prim = Actor->FindComponentByClass<UPrimitiveComponent>();
+		auto* Prim = Member->FindComponentByClass<UPrimitiveComponent>();
 		if (!Prim)
 			return;
 
 		Prim->SetSimulatePhysics(SimulatePhysics);
 		Prim->SetEnableGravity(SimulatePhysics);
 
-		MyActorUtil::SetOverlayMaterial(Actor, OverlayMaterial);
-	};
-
-	if (!Actor)
-		return;
-
-	SetToActor(Actor, SimulatePhysics, OverlayMaterial);
-
-	if (auto* Group = MyFuseHelper::FindGroup(Actor))
-	{
-		for (auto* Member : Group->GetMembers())
-		{
-			if (!Member)
-				continue;
-
-			auto* P = Member->GetOwner();
-			if (P != Actor)
-				SetToActor(P, SimulatePhysics, OverlayMaterial);
-		}
-	}
+		MyActorUtil::SetOverlayMaterial(Member, OverlayMaterial);
+	});
 }
 
 void MyFuseHelper::SetActorTransform(AActor* Actor, const FTransform& NewTran)
 {
-	auto SetToActor = [](AActor* Actor, const FTransform& NewTran) -> void
-	{
-		if (!Actor)
-			return;
-
-		Actor->SetActorTransform(NewTran, false, nullptr, ETeleportType::TeleportPhysics);
-		if (auto* PrimComp = Actor->FindComponentByClass<UPrimitiveComponent>())
-		{
-			PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
-			PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
-		}
-	};
-
-	if (!Actor)
-		return;
-
 	auto& ActorTran = Actor->GetActorTransform();
 	auto InvActorTran = ActorTran.Inverse();
 	auto ReletiveTran = InvActorTran * NewTran;
 
-	SetToActor(Actor, NewTran);
-
-	if (auto* Group = MyFuseHelper::FindGroup(Actor))
+	VisitMembers(Actor, [&](AActor* Member) -> void
 	{
-		for (auto* Member : Group->GetMembers())
+		auto NewMemberTran = Member->GetActorTransform() * ReletiveTran;
+		Member->SetActorTransform(NewMemberTran, false, nullptr, ETeleportType::TeleportPhysics);
+		if (auto* PrimComp = Member->FindComponentByClass<UPrimitiveComponent>())
 		{
-			if (!Member)
-				continue;
-			auto* P = Member->GetOwner();
-			if (P != Actor)
-				SetToActor(P, P->GetActorTransform() * ReletiveTran);
+			PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
+			PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
 		}
-	}
+	});
 }
 
 void MyFuseHelper::BreakFusedActor(AActor* Actor)
@@ -185,6 +148,114 @@ void MyFuseHelper::DestroyFuseComponent(UMyFusedComponent* Fuse)
 
 	if (!Fuse->IsBeingDestroyed())
 		Fuse->DestroyComponent();
+}
+
+int MyFuseHelper::AsyncSweepByObjectType(
+						AActor* Actor, 
+						EAsyncTraceType InTraceType, 
+						const FVector& Start, 
+						const FVector& End, 
+						const FQuat& Rot, 
+						const FCollisionObjectQueryParams& ObjectQueryParams, 
+						const FCollisionQueryParams& Params /*= FCollisionQueryParams::DefaultQueryParam*/, 
+						const FTraceDelegate* InDelegate /*= nullptr*/, 
+						uint32 UserData /*= 0*/)
+{
+	if (!Actor)
+		return 0;
+
+	auto* World = Actor->GetWorld();
+	auto ActorLoc = Actor->GetActorLocation();
+	auto RelativeStart = Start - ActorLoc;
+	auto RelativeEnd   = End   - ActorLoc;
+	auto RelativeRot   = Rot   * Actor->GetActorQuat().Inverse();
+
+
+	int TotalSweepCount = 0;
+
+	VisitMembers(Actor, [&](AActor* Member) -> void
+	{
+		auto* Prim = Member->FindComponentByClass<UPrimitiveComponent>();
+		if (!Prim)
+			return;
+
+		auto* BodyInstance = Prim->GetBodyInstance();
+		if (!BodyInstance)
+			return;
+
+		auto PrimLoc	= Prim->GetComponentLocation();
+		auto NewStart	= PrimLoc + RelativeStart;
+		auto NewEnd		= PrimLoc + RelativeEnd;
+		auto NewRot		= Prim->GetComponentQuat() * RelativeRot;
+
+		// DrawDebugLine(World, NewStart, NewEnd, FColor::Cyan);
+
+		TotalSweepCount += MyPhysics::AsyncSweepByObjectType(
+										World,
+										EAsyncTraceType::Single,
+										NewStart, NewEnd, NewRot,
+										ObjectQueryParams,
+										BodyInstance,
+										Params,
+										InDelegate, UserData);
+	});
+
+	return TotalSweepCount;
+}
+
+int MyFuseHelper::SweepSingleByObjectType(
+						AActor* Actor, 
+						struct FHitResult& OutHit, 
+						const FVector& Start, 
+						const FVector& End, 
+						const FQuat& Rot, 
+						const FCollisionObjectQueryParams& ObjectQueryParams, 
+						const FCollisionQueryParams& Params /*= FCollisionQueryParams::DefaultQueryParam*/)
+{
+	if (!Actor)
+		return 0;
+
+	auto* World = Actor->GetWorld();
+
+	auto ActorLoc = Actor->GetActorLocation();
+	auto RelativeStart = Start - ActorLoc;
+	auto RelativeEnd   = End   - ActorLoc;
+	auto RelativeRot   = Rot   * Actor->GetActorQuat().Inverse();
+
+	int OutHitCount = 0;
+	OutHit.Distance = FVector::Distance(Start, End);
+
+	VisitMembers(Actor, [&](AActor* Member) -> void
+	{
+		auto* Prim = Member->FindComponentByClass<UPrimitiveComponent>();
+		if (!Prim)
+			return;
+
+		auto* BodyInstance = Prim->GetBodyInstance();
+		if (!BodyInstance)
+			return;
+
+		auto PrimLoc	= Prim->GetComponentLocation();
+		auto NewStart	= PrimLoc + RelativeStart;
+		auto NewEnd		= PrimLoc + RelativeEnd;
+		auto NewRot		= Prim->GetComponentQuat() * RelativeRot;
+
+		DrawDebugLine(World, NewStart, NewEnd, FColor::Cyan);
+
+		FHitResult TempHitResult;
+		int Hit = MyPhysics::SweepSingleByObjectType(	World, 
+														TempHitResult, 
+														NewStart, NewEnd, NewRot,
+														ObjectQueryParams,
+														BodyInstance,
+														Params);
+
+		OutHitCount += Hit;
+		if (Hit > 0 && OutHit.Distance > TempHitResult.Distance)
+			OutHit = TempHitResult;
+	});
+
+	return OutHitCount;
 }
 
 void MyFuseHelper::DestroyGluesInFuseComponent(UMyFusedComponent* Fuse)
