@@ -25,6 +25,7 @@
 ------
 
 ## Tech
+- All logic is done by C++
 - Implement smooth object movement with damping.
 - Perform sweep trace in async mode, if possible.
 - Treat attached objects as a single group during movement and collision detection.
