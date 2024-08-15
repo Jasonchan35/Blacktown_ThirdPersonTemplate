@@ -106,7 +106,7 @@ void UMyUltraHandComponent::BeginPlay()
 	GrabTargetFxActor = GetWorld()->SpawnActor<ANiagaraActor>();
 	if (GrabTargetFxActor)
 	{
-		GrabTargetFxActor->SetActorLabel("GrabTargetFx");
+		MyActorUtil::SetActorLabel(GrabTargetFxActor, "GrabTargetFx");
 		GrabTargetFxActor->SetActorLocation(FVector(0, 0, 30));
 		GrabTargetFxActor->AttachToActor(GetOwner(), FAttachmentTransformRules::KeepRelativeTransform);
 		if (auto* Nia = GrabTargetFxActor->GetNiagaraComponent())
@@ -122,7 +122,7 @@ void UMyUltraHandComponent::BeginPlay()
 	FusableFxActor = GetWorld()->SpawnActor<ANiagaraActor>();
 	if (FusableFxActor)
 	{
-		FusableFxActor->SetActorLabel("FusableFx");
+		MyActorUtil::SetActorLabel(GrabTargetFxActor, "FusableFx");
 		FusableFxActor->AttachToActor(GetOwner(), FAttachmentTransformRules::KeepRelativeTransform);
 		if (auto* Nia = FusableFxActor->GetNiagaraComponent())
 		{

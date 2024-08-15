@@ -8,6 +8,8 @@ struct MyActorUtil
 {
 	MyActorUtil() = delete;
 
+	FORCEINLINE static void SetActorLabel(AActor* Actor, const FString& Label);
+
 	static void					SetOverlayMaterial(AActor* Actor, UMaterialInterface* Material);
 	static UMaterialInterface*	GetOverlayMaterial(AActor* Actor);
 
@@ -47,6 +49,14 @@ inline COMP_TYPE* MyActorUtil::GetOrNewComponent(PARANT* Parent)
 		return OutComp;
 
 	return NewComponent<COMP_TYPE>(Parent);
+}
+
+FORCEINLINE void MyActorUtil::SetActorLabel(AActor* Actor, const FString& Label)
+{
+#if WITH_EDITOR
+	if (Actor)
+		Actor->SetActorLabel(Label);
+#endif
 }
 
 template <class COMP_TYPE, class PARANT>
