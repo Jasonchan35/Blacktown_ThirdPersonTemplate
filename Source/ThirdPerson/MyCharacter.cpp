@@ -57,7 +57,6 @@ AMyCharacter::AMyCharacter()
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 
 	MyCDO::CreateComponent(this, UltraHandComponent);
-	MyCDO::CreateComponent(this, NiagaraComponent);
 }
 
 void AMyCharacter::SetCurrentAbility(EMyAbility Ability)

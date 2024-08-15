@@ -9,9 +9,6 @@
 #include "UObject/WeakInterfacePtr.h"
 #include "UObject/ConstructorHelpers.h"
 
-#include "NiagaraComponent.h"
-#include "NiagaraSystem.h"
-
 #include "Engine/OverlapResult.h"
 #include "Engine/TriggerBox.h"
 #include "Engine/TriggerCapsule.h"

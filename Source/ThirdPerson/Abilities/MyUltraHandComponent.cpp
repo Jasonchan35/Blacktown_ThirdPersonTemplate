@@ -1,7 +1,17 @@
 #include "MyUltraHandComponent.h"
+
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
+#include "NiagaraActor.h"
+
 #include "../MyCharacter.h"
 #include "../MyPlayerController.h"
 #include "MyFusedComponent.h"
+
+FName UMyUltraHandComponent::NAME_Color(		TEXT("Color"));
+FName UMyUltraHandComponent::NAME_BeamEnd(		TEXT("BeamEnd"));
+FName UMyUltraHandComponent::NAME_BeamWidthMin(	TEXT("BeamWidthMin"));
+FName UMyUltraHandComponent::NAME_BeamWidthMax(	TEXT("BeamWidthMax"));
 
 UMyUltraHandComponent::UMyUltraHandComponent()
 {
@@ -61,7 +71,8 @@ void UMyUltraHandComponent::SetTargetActor(AActor* Actor)
 	{
 		ResetSearchFusableTempOverlaps();
 		MyFuseHelper::SetActorState(Cur, true, nullptr);
-		NiagaraComponent->SetVisibility(false);
+		EnableFx(GrabTargetFxActor, false);
+		EnableFx(FusableFxActor, false);
 	}
 
 	TargetActor = Actor;
@@ -91,15 +102,44 @@ void UMyUltraHandComponent::SetAbilityActive(bool Active)
 void UMyUltraHandComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	if (auto* Ch = GetMyCharacter())
+
+	GrabTargetFxActor = GetWorld()->SpawnActor<ANiagaraActor>();
+	if (GrabTargetFxActor)
 	{
-		NiagaraComponent = Ch->GetNiagaraComponent();
-		if (NiagaraComponent.Get())
+		GrabTargetFxActor->SetActorLabel("GrabTargetFx");
+		GrabTargetFxActor->SetActorLocation(FVector(0, 0, 30));
+		GrabTargetFxActor->AttachToActor(GetOwner(), FAttachmentTransformRules::KeepRelativeTransform);
+		if (auto* Nia = GrabTargetFxActor->GetNiagaraComponent())
 		{
-			NiagaraComponent->SetVisibility(false);
-			NiagaraComponent->SetAsset(FXS_GrabTarget);
+			Nia->SetColorParameter(NAME_Color, FLinearColor(0.0f, 0.2f, 0.4f));
+			Nia->SetFloatParameter(NAME_BeamWidthMin, 0.1f);
+			Nia->SetFloatParameter(NAME_BeamWidthMax, 2);
+			Nia->SetVisibility(false);
+			Nia->SetAsset(FXS_GrabTarget);
 		}
 	}
+
+	FusableFxActor = GetWorld()->SpawnActor<ANiagaraActor>();
+	if (FusableFxActor)
+	{
+		FusableFxActor->SetActorLabel("FusableFx");
+		FusableFxActor->AttachToActor(GetOwner(), FAttachmentTransformRules::KeepRelativeTransform);
+		if (auto* Nia = FusableFxActor->GetNiagaraComponent())
+		{
+			Nia->SetColorParameter(NAME_Color, FLinearColor(0.0f, 0.8f, 0.0f));
+			Nia->SetVisibility(false);
+			Nia->SetAsset(FXS_GrabTarget);
+		}
+	}
+}
+
+void UMyUltraHandComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
+{
+	if (GrabTargetFxActor)
+		GrabTargetFxActor->Destroy();
+
+	if (FusableFxActor)
+		FusableFxActor->Destroy();
 }
 
 void UMyUltraHandComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -220,8 +260,9 @@ bool UMyUltraHandComponent::DoTickGrabTarget(float DeltaTime)
 	if (!DoSearchFusable())
 		return false;
 		
-	if (Fusable)
-		DrawDebugLine(GetWorld(), Fusable.SourcePoint, Fusable.ImpactPoint, FColor::Red);
+	//if (Fusable.IsValid())
+	//	DrawDebugLine(GetWorld(), Fusable.SourcePoint, Fusable.ImpactPoint, FColor::Red);
+	EnableFx(FusableFxActor, Fusable.IsValid(), Fusable.SourcePoint, Fusable.ImpactPoint);
 
 	return true;
 }
@@ -230,7 +271,7 @@ bool UMyUltraHandComponent::AcceptFusableTarget()
 {
 	auto* Target = TargetActor.Get();
 
-	if (!Fusable || !Target)
+	if (!Fusable.IsValid() || !Target)
 		return false;
 
 	auto* PrimComp = Target->FindComponentByClass<UPrimitiveComponent>();
@@ -249,18 +290,33 @@ bool UMyUltraHandComponent::AcceptFusableTarget()
 	return true;
 }
 
+void UMyUltraHandComponent::EnableFx(ANiagaraActor* NiagaraActor, bool Enable, const FVector& Start, const FVector& End)
+{
+	if (!NiagaraActor)
+		return;
+
+	auto* Nia = NiagaraActor->GetNiagaraComponent();
+	if (!Nia)
+		return;
+
+	if (!Enable)
+		Nia->SetVisibility(false);
+	else
+	{
+		NiagaraActor->SetActorLocation(Start);
+		Nia->SetVectorParameter(NAME_BeamEnd, End);
+
+		if (!Nia->IsVisible())
+			Nia->ReinitializeSystem();
+		Nia->SetVisibility(true);
+	}
+}
+
 bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 {
 	auto* Target = TargetActor.Get();
 	if (!Target) // Lost Target
 		return false;
-
-	if (NiagaraComponent.Get())
-	{
-		static FName NAME_BeamEnd(L"BeamEnd");
-		NiagaraComponent->SetVectorParameter(NAME_BeamEnd, Target->GetActorLocation());
-		NiagaraComponent->SetVisibility(true);
-	}
 
 	auto* Ch = GetMyCharacter();
 	auto* PC = GetMyPlayerController();
@@ -294,7 +350,8 @@ bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 	auto GoalQuat  = FRotator(0, ControlRot.Yaw, 0).Quaternion() * GrabTargetQuat;
 	auto GoalLoc   = ChLoc + FRotator(0, ControlRot.Yaw, 0).RotateVector(Vector);
 
-	DrawDebugLine(GetWorld(), ChLoc, GoalLoc, FColor::Green, false, 0, 0, 0);
+	// DrawDebugLine(GetWorld(), ChLoc, GoalLoc, FColor::Green, false, 0, 0, 0);
+	EnableFx(GrabTargetFxActor, true, ChLoc, GoalLoc);
 
 	FVector NewLoc  = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, GrabTargetDampingFactor);
 	FVector MoveVector = NewLoc - TargetLoc;

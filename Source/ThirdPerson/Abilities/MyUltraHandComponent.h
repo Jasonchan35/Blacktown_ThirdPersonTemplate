@@ -45,7 +45,13 @@ class UMyUltraHandComponent : public UMyAbilityComponent
 	TObjectPtr<class UMaterialInterface> MI_FusableOverlay;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<class UNiagaraSystem>	FXS_GrabTarget;
+	TObjectPtr<class UNiagaraSystem> FXS_GrabTarget;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<class ANiagaraActor> GrabTargetFxActor;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<class ANiagaraActor> FusableFxActor;
 
 public:
 	UMyUltraHandComponent();
@@ -58,10 +64,11 @@ public:
 	bool	OnLookPitchInputAdded(float Pitch);
 	EMyUltraHandMode GetMode() const { return Mode; }
 
-	bool	HasFusable() const { return bool(Fusable); }
+	bool	HasFusable() const { return Fusable.IsValid(); }
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction) override;
 
 	virtual void IA_DPad_Triggered(const FVector2D& Value) override;
@@ -70,6 +77,11 @@ protected:
 	virtual void IA_Break_Started() override;
 
 private:
+	static FName NAME_BeamEnd;
+	static FName NAME_BeamWidthMin;
+	static FName NAME_BeamWidthMax;
+	static FName NAME_Color;
+
 	TWeakObjectPtr<AActor>	TargetActor;
 
 	EMyUltraHandMode Mode = EMyUltraHandMode::None;
@@ -107,14 +119,12 @@ private:
 	FQuat	GrabTargetQuat;
 	FVector	GrabTargetVector;
 
-	TWeakObjectPtr<class UNiagaraComponent> NiagaraComponent;
-
 	struct FFusable
 	{
 		FFusable() { Reset(); }
 		void Reset() { DestActor = nullptr; }
 
-		explicit operator bool() const { return DestActor.Get() != nullptr; }
+		bool IsValid() const { return DestActor.Get() != nullptr; }
 
 		TWeakObjectPtr<AActor>	SourceActor;
 		TWeakObjectPtr<AActor>	DestActor;
@@ -136,5 +146,10 @@ private:
 	void SearchFusableAsyncResult(const FTraceHandle& TraceHandle, FTraceDatum& Data);
 
 	bool AcceptFusableTarget();
+
+	void EnableFx(	ANiagaraActor* NiagaraActor, 
+					bool Enable, 
+					const FVector& Start = FVector::ZeroVector, 
+					const FVector& End   = FVector::ZeroVector);
 };
 
