@@ -1,9 +1,10 @@
 # Ultra Hand
-- The Idea inspired from "The Legend of Zelda: Tears of the Kingdom"
+- The idea is inspired by "The Legend of Zelda: Tears of the Kingdom."
+
 ## Features
-- Grab object
+- Grab objects
 - Highlight nearby attachable objects
-- Attach objects and create bonding (Glue)
+- Attach objects and create bonds (Glue)
 - Break attached objects
 
 ---------
@@ -24,11 +25,11 @@
 ------
 
 ## Tech
-- Move object smoothly with damping
-- Do sweep trace in async mode if possible
-- Consider attached objects as single group when doing movement or collision detection
-- Re-group objects base on connection after some object removed from the group
-- Do Sliding along collied plane when moving grabbed target object for better UX
+- Implement smooth object movement with damping.
+- Perform sweep trace in async mode, if possible.
+- Treat attached objects as a single group during movement and collision detection.
+- Re-group objects based on connections after any object is removed from the group.
+- Sliding along the collided plane when moving a grabbed target object for better UX.
 
 -----
 This project is base on Template taken from Unreal Engine "5.4.2 Release".  
