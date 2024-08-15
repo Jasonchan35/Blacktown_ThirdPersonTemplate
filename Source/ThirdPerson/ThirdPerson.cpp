@@ -51,7 +51,7 @@ void ThirdPerson_Module::OnEditorStartup()
 
 void ThirdPerson_Module::OnEditorMainFrameStartup()
 {
-	MyConsole::SetVar(L"t.MaxFPS", 30); // limit the fps to avoid burning my GPU in editor during development
+	MyConsole::SetVar(L"t.MaxFPS", 60); // limit the fps to avoid burning my GPU in editor during development
 	MyConsole::EditorCmd(L"stat fps"); // show fps
 }
 #endif
