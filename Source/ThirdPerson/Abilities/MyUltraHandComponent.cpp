@@ -330,12 +330,12 @@ bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 	if (!PC || !Ch)
 		return false;
 
-	auto ChLoc = Ch->GetActorLocation();
+	auto StartLoc = Ch->GetActorLocation() + FVector(0, 0, 40);
 	auto TargetLoc  = Target->GetActorLocation();
 	auto TargetQuat = Target->GetActorQuat();
 
-	auto DeltaZ = TargetLoc.Z - ChLoc.Z;
-	auto DistXY = FVector::DistXY(TargetLoc, ChLoc);
+	auto DeltaZ = TargetLoc.Z - StartLoc.Z;
+	auto DistXY = FVector::DistXY(TargetLoc, StartLoc);
 
 	if (DistXY < GrabTargetDistanceMin - 10) return false;
 	if (DistXY > GrabTargetDistanceMax + 10) return false;
@@ -355,13 +355,13 @@ bool UMyUltraHandComponent::MoveTargetLocation(float DeltaTime)
 
 	auto GoalQuat = FRotator(0, ControlRot.Yaw, 0).Quaternion() * GrabTargetQuat;
 
-	auto GoalLoc  = ChLoc + FRotator(0, ControlRot.Yaw, 0).RotateVector(Vector);
+	auto GoalLoc  = StartLoc + FRotator(0, ControlRot.Yaw, 0).RotateVector(Vector);
 	GoalLoc = FMath::VInterpTo(TargetLoc, GoalLoc, DeltaTime, GrabTargetDampingFactor);
 
 	FVector MoveVector = GoalLoc - TargetLoc;
 
-	// DrawDebugLine(GetWorld(), ChLoc, GoalLoc, FColor::Green, false, 0, 0, 0);
-	EnableFx(GrabTargetFxActor, true, ChLoc, GoalLoc);
+	// DrawDebugLine(GetWorld(), StartLoc, GoalLoc, FColor::Green, false, 0, 0, 0);
+	EnableFx(GrabTargetFxActor, true, StartLoc, GoalLoc);
 
 	auto& AsyncData = MoveTargetAsyncData;
 	AsyncData.Reset();
