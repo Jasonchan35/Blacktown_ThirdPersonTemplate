@@ -31,6 +31,7 @@
 - Treat attached objects as a single group during movement and collision detection.
 - Re-group objects based on connections after any object is removed from the group.
 - Sliding along the collided plane when moving a grabbed target object for better UX.
+- string formatting by libfmt for better type-safty
 
 -----
 This project is base on Template taken from Unreal Engine "5.4.2 Release".  
